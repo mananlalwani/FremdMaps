@@ -1,0 +1,119 @@
+[
+  {
+    "uid": "2db11e86-c874-49b4-acea-872ee8b0d131",
+    "rooms": [
+      "129"
+    ],
+    "lat": -3550,
+    "lng": 5138,
+    "type": "room"
+  },
+  {
+    "uid": "28a9342b-4728-4314-bd3c-385065981a4a",
+    "rooms": [
+      "115",
+      "116"
+    ],
+    "lat": -3648,
+    "lng": 5282,
+    "type": "room"
+  },
+  {
+    "uid": "c07d4996-f434-4f53-a596-0e2d047f2925",
+    "rooms": [
+      "117",
+      "118"
+    ],
+    "lat": -3246,
+    "lng": 5174,
+    "type": "room"
+  },
+  {
+    "uid": "061f2ad9-db74-4fbe-a59d-58569b08b85e",
+    "rooms": [
+      "119"
+    ],
+    "lat": -2900,
+    "lng": 5158,
+    "type": "room"
+  },
+  {
+    "uid": "b9c8d186-5767-4c94-86e7-c8fc692a63b2",
+    "rooms": [
+      "120",
+      "121"
+    ],
+    "lat": -2720,
+    "lng": 5174,
+    "type": "room"
+  },
+  {
+    "uid": "0419e875-0325-4941-b21b-cf1595f6fdad",
+    "rooms": [
+      "112",
+      "113"
+    ],
+    "lat": -3646,
+    "lng": 4632,
+    "type": "room"
+  },
+  {
+    "uid": "1cc91c7c-a5f5-4da1-9292-f09bb10445cc",
+    "rooms": [
+      "114"
+    ],
+    "lat": -3644,
+    "lng": 4920,
+    "type": "room"
+  },
+  {
+    "uid": "3eb25406-db8e-479a-8faf-13533b56e09a",
+    "rooms": [
+      "122",
+      "123"
+    ],
+    "lat": -2310,
+    "lng": 5272,
+    "type": "room"
+  },
+  {
+    "uid": "b7652a08-b2da-4249-8191-df8e48da635c",
+    "rooms": [
+      "124"
+    ],
+    "lat": -2322,
+    "lng": 4680,
+    "type": "room"
+  },
+  {
+    "uid": "ff0e1a85-65af-474a-8ec2-6d95bb168f90",
+    "rooms": [
+      "164"
+    ],
+    "lat": -2320,
+    "lng": 4124,
+    "type": "room"
+  },
+  {
+    "uid": "f8227e3d-4b61-4701-8708-593c3e9fa4b0",
+    "rooms": [
+      "146"
+    ],
+    "lat": -2872,
+    "lng": 4266,
+    "type": "room"
+  },
+  {
+    "uid": "bbbf1d5c-cdbf-488d-a593-5d0c822e412f",
+    "rooms": [
+      "A"
+    ],
+    "lat": -2313,
+    "lng": 5093,
+    "type": "stairway",
+    "floor": "1",
+    "connectsTo": [
+      "A"
+    ]
+  }
+]

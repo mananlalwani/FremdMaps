@@ -1,0 +1,161 @@
+---
+// RecentSearches.astro - Display recent search history
+---
+
+<div class="recent-searches" id="recent-searches-container" style="display: none;">
+  <div class="recent-header">
+    <span class="section-label">Recent</span>
+    <button id="clear-recent-btn" class="clear-button">Clear</button>
+  </div>
+  <div id="recent-list" class="recent-list">
+    <!-- Populated dynamically -->
+  </div>
+</div>
+
+<style is:global>
+  .recent-searches {
+    margin: 0 0 var(--space-4) 0;
+    padding: 16px;
+    background: var(--panel-surface);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-lg);
+  }
+
+  .recent-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .recent-searches .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-family: var(--font-mono);
+  }
+
+  .clear-button {
+    padding: 3px 8px;
+    background: transparent;
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--duration-normal) var(--ease-out);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .clear-button:hover {
+    background: var(--error-muted);
+    color: var(--error);
+    border-color: rgba(248, 113, 113, 0.3);
+  }
+
+  .recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .recent-item {
+    padding: 12px 14px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 15px;
+    color: var(--text-primary);
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  @media (min-width: 768px) {
+    .recent-item {
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+  }
+
+  .recent-item:hover,
+  .recent-item:active {
+    border-color: var(--panel-border-hover);
+    background: var(--panel-elevated);
+  }
+
+  .recent-route {
+    flex: 1;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-body);
+  }
+
+  .recent-from {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .recent-arrow {
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  .recent-to {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .recent-delete {
+    padding: 4px 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    transition: all var(--duration-normal) var(--ease-out);
+    opacity: 0.7;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  @media (min-width: 768px) {
+    .recent-delete {
+      padding: 2px 6px;
+      font-size: 14px;
+      opacity: 0;
+    }
+    
+    .recent-item:hover .recent-delete {
+      opacity: 1;
+    }
+  }
+
+  .recent-delete:hover,
+  .recent-delete:active {
+    color: var(--error);
+  }
+
+  .recent-time {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .recent-empty {
+    padding: var(--space-4);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+</style>

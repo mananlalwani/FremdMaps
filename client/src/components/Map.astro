@@ -1,0 +1,2496 @@
+<div id="map"></div>
+
+<!-- Floor Switcher UI -->
+<div id="floor-switcher">
+    <button class="floor-btn active" data-floor="2">Floor 2</button>
+    <button class="floor-btn" data-floor="1">Floor 1</button>
+</div>
+
+<!-- Multi-Floor Route Banner -->
+<div id="multi-floor-banner" style="display: none;">
+    <span id="banner-text">Route continues on another floor</span>
+    <button id="banner-switch-btn" class="floor-switch-hint">
+        Switch to Floor <span id="banner-floor"></span> →
+    </button>
+</div>
+
+<!-- Quick Nav Button (Mobile - shows when panel minimized) -->
+<button id="quick-nav-btn" style="display: none;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="10" r="3"></circle>
+        <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"></path>
+    </svg>
+    Navigate
+</button>
+
+<!-- Debug UI - Only visible with ?admin=true URL parameter -->
+<div id="debug-ui" style="display: none;">
+    <button id="toggle-debug">Enable Debug Mode</button>
+    <div
+        id="debug-controls"
+        style="display: none; flex-direction: column; gap: 5px;"
+    >
+        <button id="mode-room" class="active-mode">Add Room Node</button>
+        <button id="mode-waypoint">Add Waypoint</button>
+        <button id="mode-bathroom">Add Bathroom</button>
+        <button id="mode-stairway">Add Stairway</button>
+        <button id="mode-connect-stairway">Connect Stairways</button>
+        <button id="mode-wall">Add Walls</button>
+        <button id="toggle-graph">Show Graph</button>
+        <button id="save-data">Save Data</button>
+        <div
+            id="stats-display"
+            style="background: var(--panel-surface); padding: 10px 12px; border-radius: var(--radius-md); font-size: 11px; color: var(--text-secondary); border: 1px solid var(--panel-border); font-family: var(--font-mono);"
+        >
+            Nodes: <span id="node-count">0</span><br />
+            Walls: <span id="wall-count">0</span><br />
+            Edges: <span id="edge-count">0</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    import L from "leaflet";
+    import "leaflet/dist/leaflet.css";
+    import { buildVisibilityGraph, getGraphStats } from "../utils/graph";
+    import { findPath, findNodeByRoom, findNearestBathroom } from "../utils/pathfinding";
+    import { convertWallData, simplifyPath } from "../utils/geometry";
+    import type { Graph, Wall, Node, SearchResult, Edge } from "../utils/types";
+    import { MAP_CONFIG, API_CONFIG, UI_CONFIG, FLOORS } from "../utils/constants";
+    import { logger, graphLogger, searchLogger, routeLogger, workerLogger } from "../utils/logger";
+    
+    // Search enhancements
+    import { 
+        searchNodes, 
+        findExactMatch, 
+        getFeaturedRooms, 
+        inferCategory, 
+        getCategoryIcon, 
+        getCategoryLabel,
+        rankWithRecency,
+        invalidateSearchCache
+    } from "../utils/search";
+    import { 
+        getRecentSearches, 
+        addRecentSearch, 
+        clearRecentSearches,
+        removeRecentSearch,
+        getFavorites, 
+        toggleFavorite,
+        isFavorite,
+        getFrequentRooms,
+        trackSearch
+    } from "../utils/storage";
+    import { FEATURED_ROOMS, SEARCH_CONFIG } from "../config/featured";
+
+    const { IMAGE_WIDTH, IMAGE_HEIGHT, MIN_ZOOM, MAX_ZOOM } = MAP_CONFIG;
+
+    // State
+    let isDebugMode = false;
+    let currentMode = "room"; // 'room', 'waypoint', 'bathroom', 'stairway', 'connect-stairway', or 'wall'
+    let currentFloor = FLOORS.DEFAULT; // Current active floor
+    
+    // Stairway connection state
+    let firstStairwayForConnection: Node | null = null; // First stairway selected in connect mode
+
+    // Data
+    let collectedNodes = []; // Nodes for current floor only (for display)
+    let collectedWalls = []; // Array of arrays of [lat, lng]
+    let allNodesAllFloors = []; // ALL nodes from all floors (for cross-floor navigation)
+
+    // Leaflet Objects
+    let nodeMarkers = {};
+    let wallPolylines = [];
+    let currentWallPolyline = null; // The wall currently being drawn
+    let map;
+    let currentImageOverlay: L.ImageOverlay | null = null; // Track current floor image
+
+    // Navigation State
+    let navigationGraph: Graph | null = null;
+    let wallObjects: Wall[] = [];
+    let currentRoute: L.Polyline | null = null;
+    let currentRouteFullPath: Node[] = []; // Store full path for multi-floor routes
+    let routeMarkers: L.Marker[] = [];
+    let graphEdges: L.Polyline[] = [];
+    let showingGraph = false;
+
+    // Search State
+    let searchDebounceTimer: number | null = null;
+    let activeDropdown: 'start' | 'end' | null = null;
+    let currentSearchResults: SearchResult[] = [];
+    let selectedStartNode: Node | null = null;
+    let selectedEndNode: Node | null = null;
+
+    // UI Elements
+    const toggleBtn = document.getElementById("toggle-debug");
+    const controlsDiv = document.getElementById("debug-controls");
+    const modeRoomBtn = document.getElementById("mode-room");
+    const modeWaypointBtn = document.getElementById("mode-waypoint");
+    const modeBathroomBtn = document.getElementById("mode-bathroom");
+    const modeStairwayBtn = document.getElementById("mode-stairway");
+    const modeConnectStairwayBtn = document.getElementById("mode-connect-stairway");
+    const modeWallBtn = document.getElementById("mode-wall");
+    const toggleGraphBtn = document.getElementById("toggle-graph");
+    const saveBtn = document.getElementById("save-data");
+    const nodeCountSpan = document.getElementById("node-count");
+    const wallCountSpan = document.getElementById("wall-count");
+    const edgeCountSpan = document.getElementById("edge-count");
+
+    // ========== SAFE DOM HELPERS (XSS Prevention) ==========
+    
+    /**
+     * Safely set text content (prevents XSS)
+     */
+    function setText(element: HTMLElement | null, text: string): void {
+        if (element) element.textContent = text;
+    }
+    
+    /**
+     * Safely create a paragraph element with text
+     */
+    function createTextParagraph(text: string, style?: string): HTMLParagraphElement {
+        const p = document.createElement('p');
+        p.textContent = text;
+        if (style) p.setAttribute('style', style);
+        return p;
+    }
+    
+    /**
+     * Safely create a div element with text content
+     */
+    function createTextDiv(text: string, className?: string): HTMLDivElement {
+        const div = document.createElement('div');
+        div.textContent = text;
+        if (className) div.className = className;
+        return div;
+    }
+    
+    /**
+     * Safely create a search result item
+     */
+    function createSearchResultItem(result: SearchResult, onSelect: () => void): HTMLElement {
+        const item = document.createElement('div');
+        item.className = 'search-result-item';
+        
+        const icon = document.createElement('span');
+        icon.className = 'result-icon';
+        icon.textContent = getCategoryIcon(result.node.category || inferCategory(result.node));
+        
+        const content = document.createElement('div');
+        content.className = 'result-content';
+        
+        const primary = document.createElement('div');
+        primary.className = 'result-primary';
+        
+        // Show the best matched room name (from matches array) or first room
+        const matchedRoom = result.matches && result.matches.length > 0 
+            ? result.matches[0] 
+            : result.node.rooms.filter(r => r !== 'waypoint')[0];
+        primary.textContent = matchedRoom || 'Unnamed';
+        
+        const secondary = document.createElement('div');
+        secondary.className = 'result-secondary';
+        const category = getCategoryLabel(result.node.category || inferCategory(result.node));
+        const floor = result.node.floor ? ` • Floor ${result.node.floor}` : '';
+        secondary.textContent = category + floor;
+        
+        content.appendChild(primary);
+        content.appendChild(secondary);
+        
+        item.appendChild(icon);
+        item.appendChild(content);
+        
+        item.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent click-outside handler from firing
+            onSelect();
+        });
+        
+        return item;
+    }
+    
+    /**
+     * Safely create a featured room item
+     */
+    function createFeaturedRoomItem(room: string, onSelect: () => void): HTMLElement {
+        const item = document.createElement('div');
+        item.className = 'search-result-item featured';
+        
+        const icon = document.createElement('span');
+        icon.className = 'result-icon';
+        icon.textContent = '⭐';
+        
+        const content = document.createElement('div');
+        content.className = 'result-content';
+        
+        const primary = document.createElement('div');
+        primary.className = 'result-primary';
+        primary.textContent = room;
+        
+        content.appendChild(primary);
+        
+        item.appendChild(icon);
+        item.appendChild(content);
+        
+        item.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent click-outside handler from firing
+            onSelect();
+        });
+        
+        return item;
+    }
+    
+    /**
+     * Safely create a recent search item
+     */
+    function createRecentSearchItem(from: string, to: string, onSelect: () => void, onDelete: () => void): HTMLElement {
+        const item = document.createElement('div');
+        item.className = 'recent-item';
+        
+        const content = document.createElement('div');
+        content.className = 'recent-content';
+        
+        const fromText = document.createElement('strong');
+        fromText.textContent = from;
+        
+        const separator = document.createElement('span');
+        separator.textContent = ' → ';
+        separator.className = 'recent-arrow';
+        
+        const toText = document.createElement('span');
+        toText.textContent = to;
+        
+        content.appendChild(fromText);
+        content.appendChild(separator);
+        content.appendChild(toText);
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'recent-delete';
+        deleteBtn.textContent = '×';
+        deleteBtn.setAttribute('aria-label', 'Delete');
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onDelete();
+        });
+        
+        item.appendChild(content);
+        item.appendChild(deleteBtn);
+        
+        item.addEventListener('click', onSelect);
+        
+        return item;
+    }
+    
+    /**
+     * Safely create a favorite item
+     */
+    function createFavoriteItem(room: string, onSelect: () => void, onToggle: () => void): HTMLElement {
+        const item = document.createElement('div');
+        item.className = 'favorite-item';
+        
+        const roomText = document.createElement('span');
+        roomText.textContent = room;
+        
+        const starBtn = document.createElement('button');
+        starBtn.className = 'favorite-star active';
+        starBtn.textContent = '★';
+        starBtn.setAttribute('aria-label', 'Remove from favorites');
+        starBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onToggle();
+        });
+        
+        item.appendChild(roomText);
+        item.appendChild(starBtn);
+        
+        item.addEventListener('click', onSelect);
+        
+        return item;
+    }
+
+    function initMap() {
+        const bounds = [
+            [-IMAGE_HEIGHT, 0],
+            [0, IMAGE_WIDTH],
+        ];
+
+        map = L.map("map", {
+            crs: L.CRS.Simple,
+            minZoom: MIN_ZOOM,
+            maxZoom: MAX_ZOOM,
+            inertia: false,
+            maxBoundsViscosity: 1.0,
+            doubleClickZoom: false,
+        });
+
+        map.setMaxBounds(bounds);
+
+        // Load initial floor image
+        const initialFloor = FLOORS.AVAILABLE.find(f => f.id === currentFloor);
+        if (initialFloor) {
+            currentImageOverlay = L.imageOverlay(initialFloor.image, bounds).addTo(map);
+        }
+
+        map.fitBounds(bounds);
+
+        map.on("click", onMapClick);
+        map.on("dblclick", onMapDoubleClick);
+        
+        // Show debug UI only if admin parameter is present
+        const urlParams = new URLSearchParams(window.location.search);
+        const isAdmin = urlParams.has('admin');
+        const debugUI = document.getElementById('debug-ui');
+        if (debugUI && isAdmin) {
+            debugUI.style.display = 'block';
+        }
+
+        loadData();
+    }
+
+    /**
+     * Switch to a different floor
+     */
+    function switchFloor(floorId: string) {
+        if (floorId === currentFloor) return; // Already on this floor
+
+        graphLogger.info(`Switching to floor ${floorId}`);
+        currentFloor = floorId;
+
+        // Update floor image
+        const floor = FLOORS.AVAILABLE.find(f => f.id === floorId);
+        if (floor && currentImageOverlay) {
+            currentImageOverlay.setUrl(floor.image);
+        }
+
+        // If we have a multi-floor route, redraw it for the current floor
+        const hasMultiFloorRoute = currentRouteFullPath.length > 0;
+        
+        if (!hasMultiFloorRoute) {
+            // Only clear route if it's not a multi-floor route
+            clearRoute();
+        }
+        
+        if (showingGraph) {
+            toggleGraphVisualization(); // Hide graph
+        }
+
+        // Update UI
+        const floorLabel = document.querySelector('.floor-label');
+        if (floorLabel) floorLabel.textContent = `Floor ${floorId}`;
+
+        // Reload data for new floor
+        loadData();
+        
+        // Redraw route for current floor if we have a multi-floor route
+        if (hasMultiFloorRoute) {
+            redrawRouteForCurrentFloor();
+        }
+        
+        // Update floor button states
+        document.querySelectorAll('.floor-btn').forEach(btn => {
+            if (btn.getAttribute('data-floor') === floorId) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    }
+
+    /**
+     * Clear all nodes and walls from the map
+     */
+    function clearMapData() {
+        // Clear node markers
+        Object.values(nodeMarkers).forEach(marker => {
+            map.removeLayer(marker);
+        });
+        nodeMarkers = {};
+        
+        // Clear wall polylines
+        wallPolylines.forEach(polyline => {
+            map.removeLayer(polyline);
+        });
+        wallPolylines = [];
+        
+        // Clear current wall being drawn
+        if (currentWallPolyline) {
+            map.removeLayer(currentWallPolyline);
+            currentWallPolyline = null;
+        }
+        
+        graphLogger.info('Cleared all map data (nodes and walls)');
+    }
+    
+    /**
+     * Render nodes and walls on the map (for admin mode)
+     */
+    function renderMapData() {
+        // Render nodes
+        collectedNodes.forEach(node => {
+            addMarker(node);
+        });
+        
+        // Render walls (only visible in debug mode)
+        collectedWalls.forEach(wallPts => {
+            addWallPolyline(wallPts);
+        });
+        
+        graphLogger.info(`Rendered ${collectedNodes.length} nodes and ${collectedWalls.length} walls`);
+    }
+
+    async function loadData() {
+        try {
+            const apiUrl = import.meta.env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL;
+            
+            // Clear existing map data before loading new data
+            clearMapData();
+            
+            // Load Nodes for current floor (for display only)
+            const nodesRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.NODES}?floor=${currentFloor}`);
+            if (!nodesRes.ok) {
+                throw new Error(`Failed to load nodes: ${nodesRes.status} ${nodesRes.statusText}`);
+            }
+            const nodes = await nodesRes.json();
+            collectedNodes = nodes;
+
+            // Load Walls for current floor
+            const wallsRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.WALLS}?floor=${currentFloor}`);
+            if (!wallsRes.ok) {
+                throw new Error(`Failed to load walls: ${wallsRes.status} ${wallsRes.statusText}`);
+            }
+            const walls = await wallsRes.json();
+            collectedWalls = walls;
+            
+            // Render the loaded data on the map
+            renderMapData();
+            
+            updateUI();
+            
+            // Load all nodes from all floors for cross-floor navigation
+            await loadAllNodesAllFloors();
+            
+            // Initialize navigation after loading all nodes
+            initializeNavigation();
+        } catch (err) {
+            logger.error("Failed to load data:", err);
+            const emptyState = document.getElementById('empty-state');
+            if (emptyState) {
+                emptyState.textContent = '';
+                emptyState.appendChild(createTextParagraph('Unable to load navigation data. Please check if the server is running.', 'color: #ff6b6b;'));
+            }
+        }
+    }
+
+    // --- LOAD ALL NODES FROM ALL FLOORS (for cross-floor navigation) ---
+    async function loadAllNodesAllFloors() {
+        try {
+            const apiUrl = import.meta.env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL;
+            const allNodes: Node[] = [];
+            
+            // Load nodes from each floor and TAG them with floor property
+            for (const floor of FLOORS.AVAILABLE) {
+                const nodesRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.NODES}?floor=${floor.id}`);
+                if (nodesRes.ok) {
+                    const floorNodes = await nodesRes.json();
+                    
+                    // Tag each node with its floor if it doesn't have one
+                    floorNodes.forEach(node => {
+                        if (!node.floor) {
+                            node.floor = floor.id;
+                        }
+                    });
+                    
+                    allNodes.push(...floorNodes);
+                    console.log(`Loaded ${floorNodes.length} nodes from Floor ${floor.id}`);
+                }
+            }
+            
+            allNodesAllFloors = allNodes;
+            console.log(`Total nodes across all floors: ${allNodesAllFloors.length}`);
+            
+            return allNodes;
+        } catch (err) {
+            logger.error("Failed to load nodes from all floors:", err);
+            return [];
+        }
+    }
+
+    // --- NAVIGATION LOGIC ---
+    // Web Worker for graph building (prevents UI freeze)
+    let graphWorker: Worker | null = null;
+    let isGraphBuilding = false; // Race condition guard
+    
+    function initializeNavigation() {
+        if (allNodesAllFloors.length < 2) {
+            logger.warn('Not enough nodes for navigation (need at least 2)');
+            return;
+        }
+        
+        // Guard against concurrent graph building
+        if (isGraphBuilding) {
+            logger.warn('Graph building already in progress');
+            return;
+        }
+        
+        // Convert walls to geometry format (current floor walls only)
+        wallObjects = convertWallData(collectedWalls);
+        
+        // Build visibility graph using Web Worker (non-blocking)
+        // IMPORTANT: Use all nodes from all floors for cross-floor navigation
+        graphLogger.log('Building navigation graph in background...');
+        isGraphBuilding = true;
+        
+        // Show loading indicator
+        const routeStatus = document.getElementById('route-status');
+        const emptyState = document.getElementById('empty-state');
+        if (emptyState) {
+            emptyState.textContent = '';
+            emptyState.appendChild(createTextParagraph('Building navigation graph...', 'color: var(--amber-400);'));
+        }
+        
+        // Create worker if not exists
+        if (!graphWorker) {
+            graphWorker = new Worker('/graph-worker.js');
+            
+            graphWorker.onmessage = function(e) {
+                // Handle different message types from worker
+                if (e.data.type === 'log') {
+                    workerLogger.log(e.data.message);
+                    return;
+                }
+                
+                if (e.data.type === 'result') {
+                    const graphObj = e.data.graph;
+                    
+                    // Convert plain object back to Map
+                    navigationGraph = new Map();
+                    for (const [key, value] of Object.entries(graphObj)) {
+                        navigationGraph.set(key, value as Edge[]);
+                    }
+                    
+                    // Log statistics
+                    const stats = getGraphStats(navigationGraph);
+                    graphLogger.log('Graph statistics:', stats);
+                    
+                    // Invalidate search cache since nodes may have changed
+                    invalidateSearchCache();
+                    
+                    // Populate room datalist for autocomplete
+                    initializeSearchEnhancements();
+                    
+                    // Restore empty state
+                    if (emptyState) {
+                        emptyState.innerHTML = `
+                            <p style="font-size: 15px; line-height: 1.6; margin-bottom: 12px;">
+                                <strong style="color: var(--amber-400);">Welcome to School Navigation!</strong>
+                            </p>
+                            <p style="margin-bottom: 8px;">Find your way around the building:</p>
+                            <ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); font-size: 14px; line-height: 1.8;">
+                                <li>Type a room number (e.g., "221", "129")</li>
+                                <li>Search for facilities (e.g., "bathroom")</li>
+                                <li>Navigate between floors automatically</li>
+                            </ul>
+                            <p style="margin-top: 16px; font-size: 13px; color: var(--text-muted);">
+                                💡 Tip: Click the 🚻 button to find the nearest bathroom
+                            </p>
+                        `;
+                    }
+                    
+                    isGraphBuilding = false; // Clear guard
+                    graphLogger.log('Navigation system ready!');
+                }
+            };
+            
+            graphWorker.onerror = function(error) {
+                logger.error('Graph worker error:', error);
+                // Fallback to synchronous building
+                graphLogger.log('Falling back to synchronous graph building...');
+                navigationGraph = buildVisibilityGraph(allNodesAllFloors, wallObjects, MAP_CONFIG.MAX_HALLWAY_DISTANCE);
+                
+                const stats = getGraphStats(navigationGraph);
+                graphLogger.log('Graph statistics:', stats);
+                
+                invalidateSearchCache();
+                initializeSearchEnhancements();
+                
+                if (emptyState) {
+                    emptyState.innerHTML = `
+                        <p style="font-size: 15px; line-height: 1.6; margin-bottom: 12px;">
+                            <strong style="color: var(--amber-400);">Welcome to School Navigation!</strong>
+                        </p>
+                        <p style="margin-bottom: 8px;">Find your way around the building:</p>
+                        <ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); font-size: 14px; line-height: 1.8;">
+                            <li>Type a room number (e.g., "221", "129")</li>
+                            <li>Search for facilities (e.g., "bathroom")</li>
+                            <li>Navigate between floors automatically</li>
+                        </ul>
+                        <p style="margin-top: 16px; font-size: 13px; color: var(--text-muted);">
+                            💡 Tip: Click the 🚻 button to find the nearest bathroom
+                        </p>
+                    `;
+                }
+                
+                isGraphBuilding = false; // Clear guard
+            };
+        }
+        
+        // Send ALL nodes from all floors to worker for cross-floor pathfinding
+        graphWorker.postMessage({
+            nodes: allNodesAllFloors,
+            walls: wallObjects,
+            maxDistance: MAP_CONFIG.MAX_HALLWAY_DISTANCE
+        });
+    }
+
+    // ========== SEARCH ENHANCEMENTS ==========
+
+    function initializeSearchEnhancements() {
+        searchLogger.log('Initializing search enhancements...');
+        
+        // Initialize Recent Searches and Favorites UI
+        updateRecentSearchesUI();
+        updateFavoritesUI();
+        
+        // Setup search inputs
+        setupSearchInput('start');
+        setupSearchInput('end');
+        
+        searchLogger.log('Search enhancements ready!');
+    }
+
+    function setupSearchInput(type: 'start' | 'end') {
+        const inputId = type === 'start' ? 'start-input' : 'end-input';
+        const input = document.getElementById(inputId) as HTMLInputElement;
+        const wrapperFor = type === 'start' ? '#start-dropdown-wrapper' : '#end-dropdown-wrapper';
+        const dropdownWrapper = document.querySelector(wrapperFor);
+        const dropdown = dropdownWrapper?.querySelector('[data-dropdown-container]') as HTMLElement;
+        
+        if (!input || !dropdown) {
+            console.warn(`Search input ${type} not found`);
+            return;
+        }
+
+        // Input event with debounce
+        input.addEventListener('input', (e) => {
+            const query = (e.target as HTMLInputElement).value;
+            
+            // Clear previous timer
+            if (searchDebounceTimer) {
+                clearTimeout(searchDebounceTimer);
+            }
+            
+            // Debounce search
+            searchDebounceTimer = setTimeout(() => {
+                handleSearchInput(query, type, dropdown);
+            }, SEARCH_CONFIG.DEBOUNCE_MS) as unknown as number;
+        });
+
+        // Focus event - show dropdown
+        input.addEventListener('focus', () => {
+            activeDropdown = type;
+            const query = input.value;
+            handleSearchInput(query, type, dropdown);
+        });
+
+        // Enter key to select first result, Escape to close
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                // Select first result if available
+                const resultsList = dropdown.querySelector('[data-results-list]') as HTMLElement;
+                const firstItem = resultsList?.querySelector('.search-result-item, .suggestion-item') as HTMLElement;
+                if (firstItem) {
+                    firstItem.click();
+                }
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                hideDropdown(dropdown);
+                activeDropdown = null;
+            }
+        });
+
+        // Click outside to close
+        document.addEventListener('click', (e) => {
+            if (!input.contains(e.target as Node) && !dropdown.contains(e.target as Node)) {
+                hideDropdown(dropdown);
+                activeDropdown = null;
+            }
+        });
+    }
+
+    function handleSearchInput(query: string, type: 'start' | 'end', dropdown: HTMLElement) {
+        const trimmedQuery = query.trim();
+        
+        // Show dropdown
+        dropdown.style.display = 'block';
+        
+        if (trimmedQuery.length === 0) {
+            // Show featured/suggestions when empty
+            renderFeaturedRooms(dropdown, type);
+        } else if (trimmedQuery.length >= SEARCH_CONFIG.MIN_QUERY_LENGTH) {
+            // Perform fuzzy search across ALL nodes from all floors
+            let results = searchNodes(trimmedQuery, allNodesAllFloors, {
+                limit: SEARCH_CONFIG.MAX_RESULTS
+            });
+            
+            // Filter out waypoints, bathrooms, and stairways - only show actual rooms
+            results = results.filter(result => 
+                result.node.type === 'room' || 
+                (!result.node.type && !result.node.rooms.includes('waypoint'))
+            );
+            
+            // Rank with recency boost
+            const frequentRooms = getFrequentRooms();
+            results = rankWithRecency(results, frequentRooms);
+            
+            // Track search
+            trackSearch(trimmedQuery, results.length);
+            
+            // Render results
+            renderSearchResults(results, dropdown, type);
+            currentSearchResults = results;
+        }
+    }
+
+    function renderSearchResults(results: SearchResult[], dropdown: HTMLElement, type: 'start' | 'end') {
+        const resultsList = dropdown.querySelector('[data-results-list]') as HTMLElement;
+        if (!resultsList) return;
+        
+        // Clear previous results
+        resultsList.textContent = '';
+        
+        if (results.length === 0) {
+            resultsList.appendChild(createTextDiv('No rooms found. Try a different search.', 'search-empty'));
+            return;
+        }
+        
+        results.forEach((result) => {
+            // Determine which room name to use based on search matches
+            const matchedRoomName = result.matches && result.matches.length > 0 
+                ? result.matches[0]  // Use the first matched room name
+                : result.node.rooms.filter(r => r !== 'waypoint')[0]; // Fallback to first room
+            
+            const item = createSearchResultItem(result, () => {
+                selectSearchResult(result.node, type, matchedRoomName);
+                hideDropdown(dropdown);
+                activeDropdown = null;
+            });
+            resultsList.appendChild(item);
+        });
+    }
+
+    function renderFeaturedRooms(dropdown: HTMLElement, type: 'start' | 'end') {
+        const resultsList = dropdown.querySelector('[data-results-list]') as HTMLElement;
+        if (!resultsList) return;
+        
+        // Clear previous results
+        resultsList.textContent = '';
+        
+        // Add suggestions header
+        const header = document.createElement('div');
+        header.className = 'suggestions-header';
+        header.textContent = 'Popular Destinations';
+        resultsList.appendChild(header);
+        
+        // Show featured rooms (filtered to only actual rooms, not bathrooms/waypoints/stairways)
+        const featured = FEATURED_ROOMS;
+        featured.forEach(room => {
+            const node = findNodeByRoom(room, allNodesAllFloors);
+            if (node && (node.type === 'room' || !node.type) && !node.rooms.includes('waypoint')) {
+                const item = createFeaturedRoomItem(room, () => {
+                    selectSearchResult(node, type, room);  // Pass the room name as matched room
+                    hideDropdown(dropdown);
+                    activeDropdown = null;
+                });
+                resultsList.appendChild(item);
+            }
+        });
+    }
+
+    function selectSearchResult(node: Node, type: 'start' | 'end', matchedRoom?: string) {
+        const inputId = type === 'start' ? 'start-input' : 'end-input';
+        const input = document.getElementById(inputId) as HTMLInputElement;
+        const wrapperSelector = type === 'start' ? '#start-dropdown-wrapper' : '#end-dropdown-wrapper';
+        const dropdown = document.querySelector(wrapperSelector + ' [data-dropdown-container]') as HTMLElement;
+        
+        if (!input) return;
+        
+        // Use the matched room if provided, otherwise use the first non-waypoint room
+        let roomName: string;
+        if (matchedRoom) {
+            roomName = matchedRoom;
+        } else {
+            roomName = node.rooms.filter(r => r !== 'waypoint')[0] || node.uid;
+        }
+        
+        input.value = roomName;
+        
+        // Store selected node
+        if (type === 'start') {
+            selectedStartNode = node;
+        } else {
+            selectedEndNode = node;
+        }
+        
+        // Hide dropdown
+        hideDropdown(dropdown);
+        activeDropdown = null;
+        
+        searchLogger.log(`Selected ${type}: ${roomName}`);
+    }
+
+    function hideDropdown(dropdown: HTMLElement) {
+        if (dropdown) {
+            dropdown.style.display = 'none';
+        }
+    }
+
+    function handleToggleFavorite(uid: string) {
+        const newState = toggleFavorite(uid);
+        searchLogger.log(`Favorite toggled for ${uid}: ${newState}`);
+        
+        // Update all favorite stars in dropdowns
+        document.querySelectorAll(`[data-uid="${uid}"] .result-favorite`).forEach(star => {
+            if (newState) {
+                star.classList.add('active');
+                star.textContent = '★';
+            } else {
+                star.classList.remove('active');
+                star.textContent = '☆';
+            }
+        });
+        
+        // Update favorites UI
+        updateFavoritesUI();
+    }
+
+    // ========== RECENT SEARCHES UI ==========
+
+    function updateRecentSearchesUI() {
+        const container = document.getElementById('recent-searches-container');
+        const list = document.getElementById('recent-list');
+        const clearBtn = document.getElementById('clear-recent-btn');
+        
+        if (!container || !list) return;
+        
+        const recent = getRecentSearches();
+        
+        if (recent.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+        
+        container.style.display = 'block';
+        list.textContent = ''; // Clear safely
+        
+        recent.forEach(entry => {
+            const item = createRecentSearchItem(
+                entry.from,
+                entry.to,
+                () => {
+                    // Click route to repeat search
+                    const startInput = document.getElementById('start-input') as HTMLInputElement;
+                    const endInput = document.getElementById('end-input') as HTMLInputElement;
+                    if (startInput && endInput) {
+                        startInput.value = entry.from;
+                        endInput.value = entry.to;
+                        handleFindRoute();
+                    }
+                },
+                () => {
+                    // Delete this recent search
+                    removeRecentSearch(entry.from, entry.to);
+                    updateRecentSearchesUI();
+                }
+            );
+            list.appendChild(item);
+        });
+        
+        // Clear all button
+        if (clearBtn) {
+            clearBtn.onclick = () => {
+                clearRecentSearches();
+                updateRecentSearchesUI();
+            };
+        }
+    }
+
+    // ========== FAVORITES UI ==========
+
+    function updateFavoritesUI() {
+        const container = document.getElementById('favorites-container');
+        const list = document.getElementById('favorites-list');
+        
+        if (!container || !list) return;
+        
+        const favoriteUIDs = getFavorites();
+        const favoriteNodes = collectedNodes.filter((n: Node) => favoriteUIDs.includes(n.uid));
+        
+        if (favoriteNodes.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+        
+        container.style.display = 'block';
+        list.textContent = ''; // Clear safely
+        
+        favoriteNodes.forEach((node: Node) => {
+            const roomName = node.rooms.filter(r => r !== 'waypoint').join(', ');
+            
+            const item = createFavoriteItem(
+                roomName,
+                () => {
+                    // Click to set as destination
+                    const endInput = document.getElementById('end-input') as HTMLInputElement;
+                    if (endInput) {
+                        endInput.value = roomName;
+                        selectedEndNode = node;
+                    }
+                },
+                () => {
+                    // Click star to unfavorite
+                    toggleFavorite(node.uid);
+                    updateFavoritesUI();
+                }
+            );
+            
+            list.appendChild(item);
+        });
+    }
+
+    // ========== END SEARCH ENHANCEMENTS ==========
+
+    function populateRoomList() {
+        // Deprecated: replaced by search enhancements
+        // Keeping for backwards compatibility
+        logger.info('populateRoomList() called - now handled by search enhancements');
+    }
+
+    function handleFindRoute() {
+        const startInput = document.getElementById('start-input') as HTMLInputElement;
+        const endInput = document.getElementById('end-input') as HTMLInputElement;
+        
+        if (!startInput || !endInput) return;
+        
+        const startRoom = startInput.value.trim();
+        const endRoom = endInput.value.trim();
+        
+        if (!startRoom || !endRoom) {
+            showStatusMessage('Please enter both start and destination', 'warning');
+            return;
+        }
+        
+        if (!navigationGraph) {
+            showStatusMessage('Navigation system is still loading. Please wait a moment.', 'warning');
+            return;
+        }
+        
+        // Show loading state
+        const findRouteBtn = document.getElementById('find-route-btn');
+        const originalBtnText = findRouteBtn?.textContent || '';
+        if (findRouteBtn) {
+            findRouteBtn.textContent = 'Calculating...';
+            (findRouteBtn as HTMLButtonElement).disabled = true;
+        }
+        
+        // Use setTimeout to let UI update before heavy computation
+        setTimeout(() => {
+            try {
+                // Try to use selected nodes from search dropdown first, fallback to text search
+                let startNode = selectedStartNode || findNodeByRoom(startRoom, collectedNodes) || findExactMatch(startRoom, collectedNodes);
+                let endNode = selectedEndNode || findNodeByRoom(endRoom, collectedNodes) || findExactMatch(endRoom, collectedNodes);
+                
+                // If still not found, try fuzzy search and use best match
+                if (!startNode) {
+                    const results = searchNodes(startRoom, collectedNodes, { limit: 1 });
+                    if (results.length > 0 && results[0].score < 0.6) {  // Accept if reasonably close
+                        startNode = results[0].node;
+                        searchLogger.log(`Using fuzzy match for start: ${startRoom} → ${startNode.rooms[0]}`);
+                    }
+                }
+                
+                if (!endNode) {
+                    const results = searchNodes(endRoom, collectedNodes, { limit: 1 });
+                    if (results.length > 0 && results[0].score < 0.6) {
+                        endNode = results[0].node;
+                        searchLogger.log(`Using fuzzy match for end: ${endRoom} → ${endNode.rooms[0]}`);
+                    }
+                }
+                
+                if (!startNode) {
+                    showStatusMessage(`Starting location "${startRoom}" not found. Try a different search.`, 'error');
+                    return;
+                }
+                
+                if (!endNode) {
+                    showStatusMessage(`Destination "${endRoom}" not found. Try a different search.`, 'error');
+                    return;
+                }
+                
+                // Run A* pathfinding across all floors
+                routeLogger.log(`Finding path from ${startRoom} to ${endRoom}...`);
+                const result = findPath(startNode.uid, endNode.uid, allNodesAllFloors, navigationGraph);
+                
+                if (!result.found) {
+                    showStatusMessage('No path found between these locations. They may be on different floors or blocked by walls.', 'error');
+                    return;
+                }
+                
+                // Save to recent searches
+                addRecentSearch(startRoom, endRoom);
+                updateRecentSearchesUI();
+                
+                routeLogger.log('Path found:', result);
+                
+                // Display route
+                displayRoute(result.path, result.distance);
+            } finally {
+                // Restore button state
+                if (findRouteBtn) {
+                    findRouteBtn.textContent = originalBtnText;
+                    (findRouteBtn as HTMLButtonElement).disabled = false;
+                }
+            }
+        }, 10);
+    }
+    
+    // Helper function for user-friendly status messages
+    function showStatusMessage(message: string, type: 'info' | 'warning' | 'error' = 'info') {
+        const routeStatus = document.getElementById('route-status');
+        if (routeStatus) {
+            const colors = {
+                info: 'var(--amber-400)',
+                warning: '#ffca28',
+                error: '#ff6b6b'
+            };
+            routeStatus.style.color = colors[type];
+            routeStatus.textContent = message;
+            
+            // Auto-clear after timeout for non-errors
+            if (type !== 'error') {
+                setTimeout(() => {
+                    if (routeStatus.textContent === message) {
+                        routeStatus.textContent = '';
+                    }
+                }, UI_CONFIG.STATUS_MESSAGE_TIMEOUT_MS);
+            }
+        } else {
+            // Fallback to alert if status element not found
+            alert(message);
+        }
+    }
+
+    function displayRoute(path, totalDistance) {
+        // Clear previous route
+        clearRoute();
+        
+        // Store full path for multi-floor navigation
+        currentRouteFullPath = path;
+        
+        // Check if route crosses floors
+        const floors = [...new Set(path.map(n => n.floor).filter(f => f))];
+        const isMultiFloor = floors.length > 1;
+        
+        if (isMultiFloor) {
+            routeLogger.log(`Multi-floor route detected: ${floors.join(', ')}`);
+            
+            // Switch to the starting floor
+            const startFloor = path[0].floor;
+            if (startFloor && startFloor !== currentFloor) {
+                switchFloor(startFloor);
+                // Wait a moment for the floor to load, then draw the route
+                setTimeout(() => {
+                    redrawRouteForCurrentFloor();
+                }, 100);
+                return;
+            }
+        }
+        
+        // Draw route for current floor
+        redrawRouteForCurrentFloor();
+        
+        // Update UI - show detailed route status
+        const routeStatus = document.getElementById('route-status');
+        const emptyState = document.getElementById('empty-state');
+        const statusTitle = document.getElementById('route-status-title');
+        const statusDetails = document.getElementById('route-status-details');
+        
+        if (routeStatus) routeStatus.style.display = 'block';
+        if (emptyState) emptyState.style.display = 'none';
+        
+        // Calculate and display route details
+        if (statusTitle && statusDetails) {
+            // Format distance
+            const distanceMeters = Math.round(totalDistance);
+            const distanceStr = distanceMeters < 1000 
+                ? `${distanceMeters}m` 
+                : `${(distanceMeters / 1000).toFixed(1)}km`;
+            
+            statusTitle.textContent = `Route: ${distanceStr}`;
+            
+            // Add floor information if multi-floor
+            if (isMultiFloor) {
+                const floorCount = floors.length;
+                statusDetails.textContent = `${floorCount} floors • Follow the amber path`;
+            } else {
+                statusDetails.textContent = 'Follow the amber path on the map';
+            }
+        }
+    }
+    
+    function redrawRouteForCurrentFloor() {
+        // Clear existing route display (but keep currentRouteFullPath)
+        if (currentRoute) {
+            map.removeLayer(currentRoute);
+            currentRoute = null;
+        }
+        routeMarkers.forEach(m => map.removeLayer(m));
+        routeMarkers = [];
+        
+        if (currentRouteFullPath.length === 0) {
+            // Hide multi-floor banner when no route
+            const banner = document.getElementById('multi-floor-banner');
+            if (banner) banner.style.display = 'none';
+            return;
+        }
+        
+        const path = currentRouteFullPath;
+        
+        // Check if route spans multiple floors
+        const floorsInRoute = [...new Set(path.map(n => n.floor).filter(f => f))];
+        const isMultiFloor = floorsInRoute.length > 1;
+        
+        // Show/hide multi-floor banner
+        const banner = document.getElementById('multi-floor-banner');
+        const bannerFloor = document.getElementById('banner-floor');
+        const bannerSwitchBtn = document.getElementById('banner-switch-btn');
+        
+        if (banner && isMultiFloor) {
+            // Find the other floor(s) in the route
+            const otherFloors = floorsInRoute.filter(f => f !== currentFloor);
+            
+            if (otherFloors.length > 0) {
+                if (bannerFloor) bannerFloor.textContent = otherFloors[0];
+                banner.style.display = 'flex';
+                
+                // Add click handler to switch floors
+                if (bannerSwitchBtn) {
+                    bannerSwitchBtn.onclick = () => switchFloor(otherFloors[0]);
+                }
+            } else {
+                banner.style.display = 'none';
+            }
+        } else if (banner) {
+            banner.style.display = 'none';
+        }
+        
+        // Filter path to only nodes on current floor
+        const nodesOnCurrentFloor = path.filter(n => n.floor === currentFloor);
+        
+        routeLogger.log(`Filtering route: ${path.length} total nodes, ${nodesOnCurrentFloor.length} on floor ${currentFloor}`);
+        
+        if (nodesOnCurrentFloor.length === 0) {
+            routeLogger.warn(`No nodes on floor ${currentFloor} in this route`);
+            return;
+        }
+        
+        // Simplify path for visualization (removes unnecessary waypoints)
+        const simplifiedPath = simplifyPath(nodesOnCurrentFloor, MAP_CONFIG.PATH_SIMPLIFICATION_ANGLE);
+        routeLogger.log('Simplified path length:', simplifiedPath.length)
+        
+        // Draw path polyline with simplified coordinates
+        const coordinates = simplifiedPath.map(n => [n.lat, n.lng]);
+        currentRoute = L.polyline(coordinates, {
+            color: UI_CONFIG.ROUTE_PATH_COLOR,
+            weight: UI_CONFIG.ROUTE_PATH_WEIGHT,
+            opacity: 0.9,
+            lineCap: 'round',
+            lineJoin: 'round',
+            className: 'route-path'
+        }).addTo(map);
+        
+        // Add start marker (if start is on this floor)
+        const startNode = path[0];
+        if (startNode.floor === currentFloor) {
+            const startIcon = L.divIcon({
+                className: 'route-marker start',
+                html: '<div style="background: #16161e; color: #f0a500; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; font-family: JetBrains Mono, monospace; border: 2px solid #f0a500; box-shadow: 0 0 16px rgba(240,165,0,0.4)">A</div>',
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            });
+            
+            const startMarker = L.marker([startNode.lat, startNode.lng], { icon: startIcon }).addTo(map);
+            routeMarkers.push(startMarker);
+        }
+        
+        // Add end marker (if end is on this floor)
+        const endNode = path[path.length - 1];
+        if (endNode.floor === currentFloor) {
+            const endIcon = L.divIcon({
+                className: 'route-marker end',
+                html: '<div style="background: #f0a500; color: #16161e; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; font-family: JetBrains Mono, monospace; border: 2px solid #f0a500; box-shadow: 0 0 16px rgba(240,165,0,0.4)">B</div>',
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            });
+            
+            const endMarker = L.marker([endNode.lat, endNode.lng], { icon: endIcon }).addTo(map);
+            routeMarkers.push(endMarker);
+        }
+        
+        // Add stairway markers for floor transitions
+        for (let i = 0; i < path.length; i++) {
+            const node = path[i];
+            if (node.type === 'stairway' && node.floor === currentFloor) {
+                const stairIcon = L.divIcon({
+                    className: 'route-marker stairway',
+                    html: '<div style="background: #9C27B0; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; border: 2px solid white; box-shadow: 0 0 12px rgba(156,39,176,0.5)">🪜</div>',
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14]
+                });
+                
+                const stairMarker = L.marker([node.lat, node.lng], { icon: stairIcon }).addTo(map);
+                routeMarkers.push(stairMarker);
+            }
+        }
+        
+        // Fit map to route (only the visible part on this floor)
+        if (currentRoute) {
+            map.fitBounds(currentRoute.getBounds(), { padding: [100, 100] });
+        }
+    }
+
+    function clearRoute() {
+        // Remove route polyline
+        if (currentRoute) {
+            map.removeLayer(currentRoute);
+            currentRoute = null;
+        }
+        
+        // Clear stored route path
+        currentRouteFullPath = [];
+        
+        // Remove route markers
+        routeMarkers.forEach(m => map.removeLayer(m));
+        routeMarkers = [];
+        
+        // Clear UI
+        const routeStatus = document.getElementById('route-status');
+        const emptyState = document.getElementById('empty-state');
+        const startInput = document.getElementById('start-input') as HTMLInputElement;
+        const endInput = document.getElementById('end-input') as HTMLInputElement;
+        
+        if (routeStatus) routeStatus.style.display = 'none';
+        if (emptyState) emptyState.style.display = 'block';
+        if (startInput) startInput.value = '';
+        if (endInput) endInput.value = '';
+        
+        // Reset selected nodes
+        selectedStartNode = null;
+        selectedEndNode = null;
+    }
+
+    function handleFindNearestBathroom() {
+        const startInput = document.getElementById('start-input') as HTMLInputElement;
+        
+        if (!startInput) return;
+        
+        const startRoom = startInput.value.trim();
+        
+        if (!startRoom) {
+            alert('Please enter your starting location first');
+            return;
+        }
+        
+        // Show loading state
+        const bathroomBtn = document.getElementById('find-bathroom-btn');
+        const originalBtnText = bathroomBtn?.textContent || '';
+        if (bathroomBtn) {
+            bathroomBtn.textContent = 'Finding...';
+            (bathroomBtn as HTMLButtonElement).disabled = true;
+        }
+        
+        // Use setTimeout to let UI update
+        setTimeout(() => {
+            try {
+                // Find starting node
+                const startNode = findNodeByRoom(startRoom, allNodesAllFloors);
+                
+                if (!startNode) {
+                    alert(`Room "${startRoom}" not found`);
+                    return;
+                }
+                
+                // Check navigation graph is ready
+                if (!navigationGraph) {
+                    alert('Navigation system not ready. Please wait...');
+                    return;
+                }
+                
+                // Find nearest bathroom across all floors using actual pathfinding distance
+                const bathroom = findNearestBathroom(startNode, allNodesAllFloors, navigationGraph);
+                
+                if (!bathroom) {
+                    alert('No bathrooms found');
+                    return;
+                }
+                
+                routeLogger.log('Nearest bathroom found:', bathroom);
+                
+                // Run pathfinding across all floors
+                routeLogger.log(`Finding path from ${startRoom} to ${bathroom.rooms[0]}...`);
+                const result = findPath(startNode.uid, bathroom.uid, allNodesAllFloors, navigationGraph);
+                
+                if (!result.found) {
+                    alert('Could not find a path to the nearest bathroom. It may be blocked by walls.');
+                    return;
+                }
+                
+                routeLogger.log('Path to bathroom found:', result);
+                
+                // Display the route
+                displayRoute(result.path, result.distance);
+            } finally {
+                // Restore button state
+                if (bathroomBtn) {
+                    bathroomBtn.textContent = originalBtnText;
+                    (bathroomBtn as HTMLButtonElement).disabled = false;
+                }
+            }
+        }, 10);
+    }
+
+    function onMapClick(e) {
+        console.log(`[DEBUG] Map clicked. Debug mode: ${isDebugMode}, Current mode: ${currentMode}`);
+        
+        if (!isDebugMode) return;
+
+        if (currentMode === "room") {
+            handleRoomNodeClick(e);
+        } else if (currentMode === "waypoint") {
+            handleWaypointClick(e);
+        } else if (currentMode === "bathroom") {
+            handleBathroomNodeClick(e);
+        } else if (currentMode === "stairway") {
+            handleStairwayNodeClick(e);
+        } else if (currentMode === "connect-stairway") {
+            console.log(`[DEBUG] Calling handleStairwayConnectionClick`);
+            handleStairwayConnectionClick(e);
+        } else if (currentMode === "wall") {
+            handleWallClick(e);
+        }
+    }
+
+    function onMapDoubleClick(e) {
+        if (!isDebugMode || currentMode !== "wall") return;
+        finishCurrentWall();
+    }
+
+    // --- NODE LOGIC ---
+    function handleRoomNodeClick(e) {
+        const input = prompt(
+            "Enter Room IDs (comma separated, e.g. '201, 202'):",
+        );
+        if (!input) return;
+
+        const rooms = input
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+        if (rooms.length === 0) return;
+
+        const uid = crypto.randomUUID();
+
+        const node = {
+            uid: uid,
+            rooms: rooms,
+            lat: e.latlng.lat,
+            lng: e.latlng.lng,
+            type: "room",
+            floor: currentFloor
+        };
+
+        collectedNodes.push(node);
+        addMarker(node);
+        updateUI();
+        
+        // Rebuild graph if it exists
+        if (navigationGraph) {
+            initializeNavigation();
+        }
+    }
+
+    function handleWaypointClick(e) {
+        const uid = crypto.randomUUID();
+
+        const node = {
+            uid: uid,
+            rooms: ["waypoint"],
+            lat: e.latlng.lat,
+            lng: e.latlng.lng,
+            type: "waypoint",
+            floor: currentFloor
+        };
+
+        collectedNodes.push(node);
+        addMarker(node);
+        updateUI();
+        
+        // Rebuild graph if it exists
+        if (navigationGraph) {
+            initializeNavigation();
+        }
+    }
+
+    function handleBathroomNodeClick(e) {
+        const bathroomName = prompt("Enter bathroom name (e.g., 'Bathroom A'):");
+        if (!bathroomName) return;
+        
+        const uid = crypto.randomUUID();
+        
+        const node = {
+            uid: uid,
+            rooms: [bathroomName],
+            lat: e.latlng.lat,
+            lng: e.latlng.lng,
+            type: "bathroom",
+            floor: currentFloor
+        };
+        
+        collectedNodes.push(node);
+        addMarker(node);
+        updateUI();
+        
+        // Rebuild graph if it exists
+        if (navigationGraph) {
+            initializeNavigation();
+        }
+    }
+
+    function handleStairwayNodeClick(e) {
+        const stairName = prompt("Enter stairway name (e.g., 'Stairway A'):");
+        if (!stairName) return;
+        
+        const connectsInput = prompt(
+            "Enter connected floor node UIDs (comma-separated):\n" +
+            "Example: uid-from-floor1, uid-from-floor3\n" +
+            "(Leave blank if not yet connected)"
+        );
+        
+        const uid = crypto.randomUUID();
+        
+        const node = {
+            uid: uid,
+            rooms: [stairName],
+            lat: e.latlng.lat,
+            lng: e.latlng.lng,
+            type: "stairway",
+            floor: currentFloor,
+            connectsTo: connectsInput 
+                ? connectsInput.split(',').map(s => s.trim()).filter(s => s.length > 0)
+                : []
+        };
+        
+        collectedNodes.push(node);
+        addMarker(node);
+        updateUI();
+        
+        // Rebuild graph if it exists
+        if (navigationGraph) {
+            initializeNavigation();
+        }
+    }
+
+    function handleStairwayConnectionClick(e) {
+        console.log(`[DEBUG] handleStairwayConnectionClick called at: ${e.latlng.lat}, ${e.latlng.lng}`);
+        
+        // Find if user clicked on a stairway marker
+        const clickedNode = findNodeAtLocation(e.latlng.lat, e.latlng.lng);
+        
+        console.log(`[DEBUG] Found node:`, clickedNode);
+        
+        if (!clickedNode || clickedNode.type !== "stairway") {
+            alert("Please click on a stairway node to connect. Add stairways first using 'Add Stairway' mode.");
+            return;
+        }
+        
+        // First stairway selected
+        if (!firstStairwayForConnection) {
+            firstStairwayForConnection = clickedNode;
+            
+            // Highlight the selected stairway
+            const marker = nodeMarkers[clickedNode.uid];
+            if (marker) {
+                marker.setIcon(L.divIcon({
+                    className: 'stairway-marker-selected',
+                    html: '<div style="background: #FFD700; color: #000; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; border: 3px solid #FF4500; box-shadow: 0 0 12px rgba(255,69,0,0.8); animation: pulse 1s infinite;">🪜</div>',
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16]
+                }));
+            }
+            
+            console.log(`First stairway selected: ${clickedNode.rooms[0]} on Floor ${clickedNode.floor}`);
+            alert(`Selected: ${clickedNode.rooms[0]} (Floor ${clickedNode.floor})\n\nNow click on another stairway to connect them.`);
+            return;
+        }
+        
+        // Second stairway selected - create connection
+        const secondStairway = clickedNode;
+        
+        // Prevent connecting to itself
+        if (firstStairwayForConnection.uid === secondStairway.uid) {
+            alert("Cannot connect a stairway to itself. Please select a different stairway.");
+            return;
+        }
+        
+        // Prevent connecting stairways on the same floor
+        if (firstStairwayForConnection.floor === secondStairway.floor) {
+            const confirmSameFloor = confirm(
+                `Warning: Both stairways are on Floor ${firstStairwayForConnection.floor}.\n\n` +
+                `Stairway connections are typically used for cross-floor navigation.\n\n` +
+                `Do you still want to connect them?`
+            );
+            if (!confirmSameFloor) {
+                resetStairwayConnection();
+                return;
+            }
+        }
+        
+        // Create bidirectional connection
+        connectStairways(firstStairwayForConnection, secondStairway);
+        
+        // Reset selection
+        resetStairwayConnection();
+        
+        console.log(`Connected: ${firstStairwayForConnection.rooms[0]} (Floor ${firstStairwayForConnection.floor}) ↔ ${secondStairway.rooms[0]} (Floor ${secondStairway.floor})`);
+        alert(
+            `✅ Stairways connected!\n\n` +
+            `${firstStairwayForConnection.rooms[0]} (Floor ${firstStairwayForConnection.floor})\n` +
+            `↕️\n` +
+            `${secondStairway.rooms[0]} (Floor ${secondStairway.floor})\n\n` +
+            `Don't forget to save your changes!`
+        );
+    }
+
+    function findNodeAtLocation(lat: number, lng: number, tolerance: number = 20): Node | null {
+        // Find node within tolerance distance from click
+        for (const node of collectedNodes) {
+            const distance = Math.sqrt(
+                Math.pow(node.lat - lat, 2) + Math.pow(node.lng - lng, 2)
+            );
+            if (distance < tolerance) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    function connectStairways(stairway1: Node, stairway2: Node) {
+        // Add bidirectional connections using NAMES (not UIDs)
+        // This makes it easier for users - they just need to use the same stairway name
+        if (!stairway1.connectsTo) {
+            stairway1.connectsTo = [];
+        }
+        if (!stairway2.connectsTo) {
+            stairway2.connectsTo = [];
+        }
+        
+        const stairway1Name = stairway1.rooms[0]; // First room name is the stairway name
+        const stairway2Name = stairway2.rooms[0];
+        
+        // Add connections by name if not already present
+        if (!stairway1.connectsTo.includes(stairway2Name)) {
+            stairway1.connectsTo.push(stairway2Name);
+        }
+        if (!stairway2.connectsTo.includes(stairway1Name)) {
+            stairway2.connectsTo.push(stairway1Name);
+        }
+        
+        // Update markers to reflect new connection count
+        updateMarker(stairway1);
+        updateMarker(stairway2);
+        
+        // Rebuild graph to include new connection
+        if (navigationGraph) {
+            initializeNavigation();
+        }
+        
+        updateUI();
+    }
+
+    function resetStairwayConnection() {
+        if (firstStairwayForConnection) {
+            // Reset the marker icon to normal
+            updateMarker(firstStairwayForConnection);
+            firstStairwayForConnection = null;
+        }
+    }
+
+    function updateMarker(node: Node) {
+        // Remove old marker
+        if (nodeMarkers[node.uid]) {
+            map.removeLayer(nodeMarkers[node.uid]);
+            delete nodeMarkers[node.uid];
+        }
+        // Add updated marker
+        addMarker(node);
+    }
+
+    function addMarker(node) {
+        const isBathroom = node.type === "bathroom";
+        const isStairway = node.type === "stairway";
+        const isWaypoint = node.type === "waypoint" || node.rooms.includes("waypoint");
+        
+        const container = document.createElement("div");
+        
+        if (isBathroom) {
+            const title = document.createElement("b");
+            title.style.color = "#00BCD4";
+            title.textContent = `🚻 ${node.rooms.join(", ")}`;
+            container.appendChild(title);
+            container.appendChild(document.createElement("br"));
+            
+            if (node.floor) {
+                const floor = document.createElement("small");
+                floor.textContent = `Floor ${node.floor}`;
+                container.appendChild(floor);
+                container.appendChild(document.createElement("br"));
+            }
+        } else if (isStairway) {
+            const connections = node.connectsTo?.length || 0;
+            const title = document.createElement("b");
+            title.style.color = "#9C27B0";
+            title.textContent = `🪜 ${node.rooms.join(", ")}`;
+            container.appendChild(title);
+            container.appendChild(document.createElement("br"));
+            
+            const info = document.createElement("small");
+            info.textContent = `Floor ${node.floor || '?'} • Connects to ${connections} floor(s)`;
+            container.appendChild(info);
+            container.appendChild(document.createElement("br"));
+        } else if (isWaypoint) {
+            const title = document.createElement("b");
+            title.style.color = "#FF9800";
+            title.textContent = "⚡ Waypoint";
+            container.appendChild(title);
+            container.appendChild(document.createElement("br"));
+        } else {
+            const title = document.createElement("b");
+            title.textContent = node.rooms.join(", ");
+            container.appendChild(title);
+            container.appendChild(document.createElement("br"));
+        }
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "Delete";
+        deleteBtn.style.cssText =
+            "background: #ff4444; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 3px; margin-top: 5px; font-size: 12px;";
+
+        L.DomEvent.on(deleteBtn, "click", (e) => {
+            L.DomEvent.stopPropagation(e);
+            L.DomEvent.preventDefault(e);
+            deleteNode(node.uid);
+        });
+
+        container.appendChild(deleteBtn);
+
+        // Different marker icons for each type
+        const markerOptions: L.MarkerOptions = {};
+        
+        // Make markers invisible in user mode
+        if (!isDebugMode) {
+            markerOptions.opacity = 0;
+            markerOptions.icon = L.divIcon({
+                className: 'hidden-marker',
+                html: '',
+                iconSize: [0, 0]
+            });
+        } else if (isBathroom) {
+            markerOptions.icon = L.divIcon({
+                className: 'bathroom-marker',
+                html: '<div style="background: #00BCD4; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; border: 2px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.4);">🚻</div>',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+        } else if (isStairway) {
+            markerOptions.icon = L.divIcon({
+                className: 'stairway-marker',
+                html: '<div style="background: #9C27B0; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; border: 2px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.4);">🪜</div>',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+        } else if (isWaypoint) {
+            markerOptions.icon = L.divIcon({
+                className: 'waypoint-marker',
+                html: '<div style="background: #FF9800; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.4);"></div>',
+                iconSize: [12, 12],
+                iconAnchor: [6, 6]
+            });
+        }
+
+        const marker = L.marker([node.lat, node.lng], markerOptions)
+            .addTo(map)
+            .bindPopup(container);
+
+        marker.on("click", () => {
+            if (!isDebugMode) marker.closePopup();
+        });
+
+        nodeMarkers[node.uid] = marker;
+        
+        if (isDebugMode) {
+            marker.openPopup();
+        }
+    }
+
+    function deleteNode(uid) {
+        if (confirm(`Delete node?`)) {
+            if (nodeMarkers[uid]) {
+                map.removeLayer(nodeMarkers[uid]);
+                delete nodeMarkers[uid];
+            }
+            collectedNodes = collectedNodes.filter((n) => n.uid !== uid);
+            updateUI();
+            
+            // Rebuild graph
+            if (navigationGraph) {
+                initializeNavigation();
+            }
+        }
+    }
+
+    // --- WALL LOGIC ---
+    function addWallPolyline(wallPts) {
+        const polyline = L.polyline(wallPts, {
+            color: "red",
+            weight: 4,
+            opacity: isDebugMode ? 1 : 0  // Invisible in user mode
+        }).addTo(map);
+
+        polyline.on("click", (e) => {
+            if (!isDebugMode) return;
+            L.DomEvent.stopPropagation(e);
+            if (confirm("Delete this wall segment?")) {
+                deleteWall(polyline);
+            }
+        });
+
+        wallPolylines.push(polyline);
+        return polyline;
+    }
+
+    function deleteWall(polyline) {
+        const idx = wallPolylines.indexOf(polyline);
+        if (idx !== -1) {
+            map.removeLayer(polyline);
+            wallPolylines.splice(idx, 1);
+            collectedWalls.splice(idx, 1);
+            updateUI();
+        }
+    }
+
+    function handleWallClick(e) {
+        const point = [e.latlng.lat, e.latlng.lng];
+
+        if (!currentWallPolyline) {
+            // Start new wall
+            currentWallPolyline = L.polyline([point], {
+                color: "red",
+                weight: 4,
+            }).addTo(map);
+        } else {
+            // Add point to existing wall
+            currentWallPolyline.addLatLng(point);
+        }
+    }
+
+    function finishCurrentWall() {
+        if (!currentWallPolyline) return;
+
+        const latlngs = currentWallPolyline.getLatLngs();
+        if (latlngs.length > 1) {
+            const wallPoints = latlngs.map((ll) => [ll.lat, ll.lng]);
+            collectedWalls.push(wallPoints);
+            // Remove the temporary polyline and re-add via helper (adds click listener)
+            map.removeLayer(currentWallPolyline);
+            addWallPolyline(wallPoints);
+        } else {
+            map.removeLayer(currentWallPolyline);
+        }
+
+        currentWallPolyline = null;
+        updateUI();
+    }
+
+    // --- UI & UTILS ---
+    function updateUI() {
+        nodeCountSpan.textContent = collectedNodes.length;
+        wallCountSpan.textContent = collectedWalls.length;
+        
+        // Update edge count if graph exists
+        if (navigationGraph && edgeCountSpan) {
+            const stats = getGraphStats(navigationGraph);
+            edgeCountSpan.textContent = stats.edges.toString();
+        }
+    }
+
+    function toggleGraphVisualization() {
+        if (!navigationGraph) {
+            alert('Navigation graph not built yet. Add more nodes first.');
+            return;
+        }
+        
+        if (showingGraph) {
+            // Hide graph
+            graphEdges.forEach(edge => map.removeLayer(edge));
+            graphEdges = [];
+            showingGraph = false;
+            if (toggleGraphBtn) toggleGraphBtn.textContent = 'Show Graph';
+        } else {
+            // Show graph
+            graphEdges = [];
+            
+            // Draw edges
+            navigationGraph.forEach((edges, fromUid) => {
+                const fromNode = collectedNodes.find(n => n.uid === fromUid);
+                if (!fromNode) return;
+                
+                edges.forEach(edge => {
+                    const toNode = collectedNodes.find(n => n.uid === edge.to);
+                    if (!toNode) return;
+                    
+                    // Only draw each edge once (check if we haven't drawn reverse edge)
+                    const alreadyDrawn = graphEdges.some(polyline => {
+                        const latlngs = polyline.getLatLngs();
+                        return (latlngs[0].lat === toNode.lat && 
+                                latlngs[0].lng === toNode.lng &&
+                                latlngs[1].lat === fromNode.lat && 
+                                latlngs[1].lng === fromNode.lng);
+                    });
+                    
+                    if (alreadyDrawn) return;
+                    
+                    const polyline = L.polyline([
+                        [fromNode.lat, fromNode.lng],
+                        [toNode.lat, toNode.lng]
+                    ], {
+                        color: '#00ff00',
+                        weight: 2,
+                        opacity: 0.4,
+                        dashArray: '5, 5'
+                    }).addTo(map);
+                    
+                    graphEdges.push(polyline);
+                });
+            });
+            
+            showingGraph = true;
+            if (toggleGraphBtn) toggleGraphBtn.textContent = 'Hide Graph';
+            logger.log(`Showing ${graphEdges.length} graph edges`);
+        }
+    }
+
+    function setMode(mode) {
+        console.log(`[DEBUG] Setting mode to: ${mode}`);
+        currentMode = mode;
+        // Finish any ongoing wall when switching
+        finishCurrentWall();
+        
+        // Reset stairway connection state when switching modes
+        if (mode !== "connect-stairway") {
+            resetStairwayConnection();
+        }
+
+        // Update Button Styles
+        if (modeRoomBtn) modeRoomBtn.style.backgroundColor = mode === "room" ? "#2196F3" : "#ddd";
+        if (modeWaypointBtn) modeWaypointBtn.style.backgroundColor = mode === "waypoint" ? "#FF9800" : "#ddd";
+        if (modeBathroomBtn) modeBathroomBtn.style.backgroundColor = mode === "bathroom" ? "#00BCD4" : "#ddd";
+        if (modeStairwayBtn) modeStairwayBtn.style.backgroundColor = mode === "stairway" ? "#9C27B0" : "#ddd";
+        if (modeConnectStairwayBtn) modeConnectStairwayBtn.style.backgroundColor = mode === "connect-stairway" ? "#FFD700" : "#ddd";
+        if (modeWallBtn) modeWallBtn.style.backgroundColor = mode === "wall" ? "#f44336" : "#ddd";
+        
+        console.log(`[DEBUG] Mode set. Current mode is now: ${currentMode}`);
+    }
+
+    toggleBtn.addEventListener("click", () => {
+        isDebugMode = !isDebugMode;
+        toggleBtn.textContent = isDebugMode
+            ? "Disable Debug Mode"
+            : "Enable Debug Mode";
+        toggleBtn.style.backgroundColor = isDebugMode ? "#ff4444" : "#4CAF50";
+        controlsDiv.style.display = isDebugMode ? "flex" : "none";
+
+        if (isDebugMode) {
+            setMode("room"); // Default to room mode
+            
+            // Show all nodes and walls when entering debug mode
+            collectedNodes.forEach((node) => {
+                if (!nodeMarkers[node.uid]) {
+                    addMarker(node);
+                } else {
+                    // Update existing marker to be visible with proper icon
+                    const marker = nodeMarkers[node.uid];
+                    const isBathroom = node.type === "bathroom";
+                    const isStairway = node.type === "stairway";
+                    const isWaypoint = node.type === "waypoint" || node.rooms.includes("waypoint");
+                    
+                    if (isBathroom) {
+                        marker.setIcon(L.divIcon({
+                            className: 'bathroom-marker',
+                            html: '<div style="background: #00BCD4; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; border: 2px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.4);">🚻</div>',
+                            iconSize: [24, 24],
+                            iconAnchor: [12, 12]
+                        }));
+                    } else if (isStairway) {
+                        marker.setIcon(L.divIcon({
+                            className: 'stairway-marker',
+                            html: '<div style="background: #9C27B0; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; border: 2px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.4);">🪜</div>',
+                            iconSize: [24, 24],
+                            iconAnchor: [12, 12]
+                        }));
+                    } else if (isWaypoint) {
+                        marker.setIcon(L.divIcon({
+                            className: 'waypoint-marker',
+                            html: '<div style="background: #FF9800; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.4);"></div>',
+                            iconSize: [12, 12],
+                            iconAnchor: [6, 6]
+                        }));
+                    } else {
+                        // Regular room marker - use default Leaflet marker or custom icon
+                        marker.setIcon(L.icon.Default ? new L.Icon.Default() : L.divIcon({
+                            className: 'room-marker',
+                            html: '<div style="background: #2196F3; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.4);"></div>',
+                            iconSize: [16, 16],
+                            iconAnchor: [8, 8]
+                        }));
+                    }
+                    marker.setOpacity(1);
+                }
+            });
+            
+            // Show walls
+            wallPolylines.forEach((polyline) => {
+                polyline.setStyle({ opacity: 1 });
+            });
+            
+            collectedWalls.forEach((wallPts) => {
+                // Check if wall already exists
+                const exists = wallPolylines.some(poly => {
+                    const latlngs = poly.getLatLngs();
+                    return latlngs.length === wallPts.length &&
+                           latlngs[0].lat === wallPts[0][0] &&
+                           latlngs[0].lng === wallPts[0][1];
+                });
+                
+                if (!exists) {
+                    addWallPolyline(wallPts);
+                }
+            });
+        } else {
+            finishCurrentWall();
+            
+            // Hide all nodes when exiting debug mode
+            Object.values(nodeMarkers).forEach((marker: L.Marker) => {
+                marker.closePopup();
+                marker.setIcon(L.divIcon({
+                    className: 'hidden-marker',
+                    html: '',
+                    iconSize: [0, 0]
+                }));
+            });
+            
+            // Hide walls (make invisible but still used for pathfinding)
+            wallPolylines.forEach((polyline) => {
+                polyline.setStyle({ opacity: 0 });
+            });
+            
+            // Also hide graph edges if visible
+            if (showingGraph) {
+                toggleGraphVisualization();
+            }
+        }
+    });
+
+    if (modeRoomBtn) {
+        modeRoomBtn.addEventListener("click", () => setMode("room"));
+    }
+    
+    if (modeWaypointBtn) {
+        modeWaypointBtn.addEventListener("click", () => setMode("waypoint"));
+    }
+    
+    if (modeBathroomBtn) {
+        modeBathroomBtn.addEventListener("click", () => setMode("bathroom"));
+    }
+    
+    if (modeStairwayBtn) {
+        modeStairwayBtn.addEventListener("click", () => setMode("stairway"));
+    }
+    
+    if (modeConnectStairwayBtn) {
+        modeConnectStairwayBtn.addEventListener("click", () => {
+            console.log(`[DEBUG] Connect Stairways button clicked`);
+            setMode("connect-stairway");
+        });
+    }
+    
+    if (modeWallBtn) {
+        modeWallBtn.addEventListener("click", () => setMode("wall"));
+    }
+    
+    if (toggleGraphBtn) {
+        toggleGraphBtn.addEventListener("click", toggleGraphVisualization);
+    }
+
+    saveBtn.addEventListener("click", async () => {
+        try {
+            const apiUrl = import.meta.env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL;
+            
+            if (collectedNodes.length === 0 && collectedWalls.length === 0) {
+                alert("No data to save. Add some nodes or walls first.");
+                return;
+            }
+            
+            if (collectedNodes.length > 0) {
+                const nodesRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.NODES}?floor=${currentFloor}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(collectedNodes),
+                });
+                
+                if (!nodesRes.ok) {
+                    const errorData = await nodesRes.json().catch(() => ({ message: 'Unknown error' }));
+                    throw new Error(`Failed to save nodes: ${errorData.message || nodesRes.statusText}`);
+                }
+            }
+            
+            if (collectedWalls.length > 0) {
+                const wallsRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.WALLS}?floor=${currentFloor}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(collectedWalls),
+                });
+                
+                if (!wallsRes.ok) {
+                    const errorData = await wallsRes.json().catch(() => ({ message: 'Unknown error' }));
+                    throw new Error(`Failed to save walls: ${errorData.message || wallsRes.statusText}`);
+                }
+            }
+            
+            alert(`Data saved successfully for Floor ${currentFloor}!`);
+        } catch (err) {
+            logger.error("Error saving data:", err);
+            alert(`Error saving data: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+    });
+
+    // Navigation event listeners
+    const findRouteBtn = document.getElementById('find-route-btn');
+    const clearRouteBtn = document.getElementById('clear-route-btn');
+    const findBathroomBtn = document.getElementById('find-bathroom-btn');
+    
+    if (findRouteBtn) {
+        findRouteBtn.addEventListener('click', handleFindRoute);
+    }
+    
+    if (clearRouteBtn) {
+        clearRouteBtn.addEventListener('click', clearRoute);
+    }
+    
+    if (findBathroomBtn) {
+        findBathroomBtn.addEventListener('click', handleFindNearestBathroom);
+    }
+
+    // Demo example button handlers
+    document.querySelectorAll('.demo-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const fromRoom = btn.getAttribute('data-from');
+            const toRoom = btn.getAttribute('data-to');
+            const startInput = document.getElementById('start-input') as HTMLInputElement;
+            const endInput = document.getElementById('end-input') as HTMLInputElement;
+            
+            if (startInput && endInput && fromRoom && toRoom) {
+                startInput.value = fromRoom;
+                endInput.value = toRoom;
+                handleFindRoute();
+            }
+        });
+    });
+
+    // Mobile panel collapse/expand functionality
+    const navPanel = document.getElementById('nav-panel');
+    const panelHandle = document.getElementById('panel-handle');
+    const quickNavBtn = document.getElementById('quick-nav-btn');
+    let panelState: 'normal' | 'expanded' | 'minimized' = 'normal';
+    
+    // Show/hide quick nav button based on panel state
+    function updateQuickNavButton() {
+        if (quickNavBtn && window.innerWidth < 768) {
+            quickNavBtn.style.display = panelState === 'minimized' ? 'flex' : 'none';
+        } else if (quickNavBtn) {
+            quickNavBtn.style.display = 'none';
+        }
+    }
+    
+    if (quickNavBtn) {
+        quickNavBtn.addEventListener('click', () => {
+            if (navPanel) {
+                navPanel.classList.remove('panel-minimized');
+                navPanel.classList.remove('panel-expanded');
+                panelState = 'normal';
+                updateQuickNavButton();
+            }
+        });
+    }
+    
+    if (panelHandle && navPanel) {
+        panelHandle.addEventListener('click', () => {
+            if (window.innerWidth < 768) { // Only on mobile
+                if (panelState === 'normal' || panelState === 'minimized') {
+                    // Expand
+                    navPanel.classList.remove('panel-minimized');
+                    navPanel.classList.add('panel-expanded');
+                    panelState = 'expanded';
+                } else {
+                    // Minimize
+                    navPanel.classList.remove('panel-expanded');
+                    navPanel.classList.add('panel-minimized');
+                    panelState = 'minimized';
+                }
+                updateQuickNavButton();
+            }
+        });
+        
+        // Double-tap on header to minimize (alternative interaction)
+        const panelHeader = navPanel.querySelector('.panel-header');
+        if (panelHeader) {
+            let lastTap = 0;
+            panelHeader.addEventListener('click', () => {
+                if (window.innerWidth < 768) {
+                    const now = Date.now();
+                    if (now - lastTap < 300) {
+                        // Double tap detected
+                        navPanel.classList.remove('panel-expanded');
+                        navPanel.classList.add('panel-minimized');
+                        panelState = 'minimized';
+                        updateQuickNavButton();
+                    }
+                    lastTap = now;
+                }
+            });
+        }
+    }
+    
+    // Update button visibility on resize
+    window.addEventListener('resize', updateQuickNavButton);
+    updateQuickNavButton();
+
+    // Cleanup function to prevent memory leaks
+    function cleanup() {
+        // Terminate Web Worker
+        if (graphWorker) {
+            graphWorker.terminate();
+            graphWorker = null;
+            logger.log('Web Worker terminated');
+        }
+        
+        // Clear graph edges from map
+        graphEdges.forEach(edge => map.removeLayer(edge));
+        graphEdges = [];
+        
+        // Clear route markers
+        routeMarkers.forEach(marker => map.removeLayer(marker));
+        routeMarkers = [];
+        
+        // Clear current route
+        if (currentRoute) {
+            map.removeLayer(currentRoute);
+            currentRoute = null;
+        }
+        
+        // Note: Event listeners will be automatically cleaned up when the page unloads
+        logger.log('Cleanup completed');
+    }
+    
+    // Add cleanup on page unload
+    window.addEventListener('beforeunload', cleanup);
+
+    // Floor switcher event listeners
+    document.querySelectorAll('.floor-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const floorId = btn.getAttribute('data-floor');
+            if (floorId) {
+                switchFloor(floorId);
+            }
+        });
+    });
+
+    initMap();
+</script>
+
+<style>
+    #map {
+        height: 100vh;
+        width: 100vw;
+        background: #1a1a24;
+        position: relative;
+    }
+    
+    /* Custom route path styling */
+    :global(.route-path) {
+        filter: drop-shadow(0 2px 8px rgba(240, 165, 0, 0.5));
+    }
+    
+    /* Route marker overrides */
+    :global(.route-marker) {
+        background: transparent !important;
+        border: none !important;
+    }
+    
+    /* Floor Switcher */
+    #floor-switcher {
+        position: fixed;
+        z-index: 1002;
+        display: flex;
+        gap: 6px;
+        background: var(--panel-bg);
+        padding: 4px;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--panel-border);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(12px);
+    }
+    
+    /* Mobile: Top left corner */
+    @media (max-width: 767px) {
+        #floor-switcher {
+            top: 10px;
+            left: 10px;
+        }
+        
+        .floor-btn {
+            padding: 8px 14px;
+            font-size: 11px;
+        }
+    }
+    
+    /* Desktop: Top left, next to nav panel */
+    @media (min-width: 768px) {
+        #floor-switcher {
+            top: 16px;
+            left: 416px; /* Nav panel width (380px) + gap (36px) */
+        }
+        
+        .floor-btn {
+            padding: 10px 18px;
+            font-size: 13px;
+        }
+    }
+    
+    .floor-btn {
+        border: 1px solid var(--panel-border);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        background: var(--panel-surface);
+        color: var(--text-secondary);
+        font-weight: 600;
+        font-family: var(--font-body);
+        transition: all var(--duration-normal) var(--ease-out);
+        -webkit-tap-highlight-color: transparent;
+        white-space: nowrap;
+    }
+    
+    .floor-btn:hover {
+        border-color: var(--amber-500);
+        color: var(--amber-400);
+        background: var(--panel-elevated);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        transform: translateY(-1px);
+    }
+    
+    .floor-btn:active {
+        transform: scale(0.97) translateY(0);
+    }
+    
+    .floor-btn.active {
+        background: linear-gradient(135deg, var(--amber-500) 0%, var(--amber-600) 100%);
+        color: var(--panel-bg);
+        border-color: var(--amber-500);
+        box-shadow: 0 2px 12px var(--amber-glow-strong), 0 0 20px rgba(240, 165, 0, 0.2);
+        font-weight: 700;
+    }
+    
+    /* Multi-Floor Route Banner */
+    #multi-floor-banner {
+        position: fixed;
+        top: 70px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1003;
+        background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);
+        color: white;
+        padding: 12px 20px;
+        border-radius: var(--radius-lg);
+        box-shadow: 0 8px 24px rgba(156, 39, 176, 0.5), 0 0 40px rgba(156, 39, 176, 0.2);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        font-weight: 500;
+        animation: slideDown 0.3s var(--ease-out);
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+    
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+    }
+    
+    #multi-floor-banner #banner-text {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    #multi-floor-banner #banner-text::before {
+        content: "🪜";
+        font-size: 18px;
+    }
+    
+    .floor-switch-hint {
+        background: rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        padding: 6px 12px;
+        border-radius: var(--radius-md);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-out);
+        white-space: nowrap;
+    }
+    
+    .floor-switch-hint:hover {
+        background: rgba(255, 255, 255, 0.3);
+        border-color: rgba(255, 255, 255, 0.5);
+    }
+    
+    .floor-switch-hint:active {
+        transform: scale(0.95);
+    }
+    
+    @media (max-width: 767px) {
+        #multi-floor-banner {
+            top: 60px;
+            font-size: 13px;
+            padding: 10px 16px;
+            max-width: calc(100% - 40px);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+    }
+    
+    /* Quick Nav Button (Mobile) */
+    #quick-nav-btn {
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        z-index: 1001;
+        background: var(--amber-500);
+        color: var(--panel-bg);
+        border: none;
+        border-radius: 50px;
+        padding: 14px 24px;
+        font-size: 15px;
+        font-weight: 700;
+        font-family: var(--font-body);
+        box-shadow: 0 4px 20px rgba(240, 165, 0, 0.4);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all var(--duration-normal) var(--ease-out);
+        -webkit-tap-highlight-color: transparent;
+    }
+    
+    #quick-nav-btn:hover {
+        background: var(--amber-400);
+        box-shadow: 0 6px 24px rgba(240, 165, 0, 0.5);
+        transform: translateY(-2px);
+    }
+    
+    #quick-nav-btn:active {
+        transform: scale(0.95) translateY(0);
+    }
+    
+    #quick-nav-btn svg {
+        width: 20px;
+        height: 20px;
+    }
+    
+    @media (min-width: 768px) {
+        #quick-nav-btn {
+            display: none !important;
+        }
+    }
+    
+    #debug-ui {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-end;
+    }
+    button {
+        padding: 10px 16px;
+        border: 1px solid var(--panel-border);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        background: var(--panel-bg);
+        color: var(--text-secondary);
+        font-weight: 600;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        transition: all var(--duration-normal) var(--ease-out);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    button:hover {
+        border-color: var(--amber-500);
+        color: var(--amber-400);
+    }
+    
+    button:active {
+        transform: scale(0.97);
+    }
+    
+    .active-mode {
+        background: var(--amber-500) !important;
+        color: var(--panel-bg) !important;
+        border-color: var(--amber-500) !important;
+    }
+    
+    /* Pulse animation for selected stairway */
+    @keyframes pulse {
+        0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 0 12px rgba(255, 69, 0, 0.8);
+        }
+        50% {
+            transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(255, 69, 0, 1);
+        }
+    }
+    
+    :global(.stairway-marker-selected) {
+        animation: pulse 1s infinite;
+    }
+</style>

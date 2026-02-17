@@ -1,0 +1,270 @@
+---
+import Map from "../components/Map.astro";
+import NavigationPanel from "../components/NavigationPanel.astro";
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" href="/favicon.ico" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+		<meta name="generator" content={Astro.generator} />
+		<title>Wayfinder - Floor 2</title>
+		
+		<!-- Google Fonts -->
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+		
+		<style is:global>
+			/* Design System - Wayfinder */
+			:root {
+				/* Typography */
+				--font-display: 'DM Serif Display', serif;
+				--font-body: 'Plus Jakarta Sans', sans-serif;
+				--font-mono: 'JetBrains Mono', monospace;
+				
+				/* Dark Panel Palette */
+				--panel-bg: #16161e;
+				--panel-surface: #1e1e2a;
+				--panel-elevated: #262636;
+				--panel-border: rgba(255, 255, 255, 0.06);
+				--panel-border-hover: rgba(255, 255, 255, 0.12);
+				
+				/* Amber Accent System */
+				--amber-50: #fff8e1;
+				--amber-100: #ffecb3;
+				--amber-300: #ffd54f;
+				--amber-400: #ffca28;
+				--amber-500: #f0a500;
+				--amber-600: #e09200;
+				--amber-glow: rgba(240, 165, 0, 0.15);
+				--amber-glow-strong: rgba(240, 165, 0, 0.3);
+				
+				/* Text Colors */
+				--text-primary: #e8e6e1;
+				--text-secondary: #9895a3;
+				--text-muted: #5c5970;
+				--text-accent: var(--amber-400);
+				
+				/* Semantic */
+				--success: #4ade80;
+				--success-muted: rgba(74, 222, 128, 0.15);
+				--info: #60a5fa;
+				--error: #f87171;
+				--error-muted: rgba(248, 113, 113, 0.15);
+				
+				/* Elevation */
+				--shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+				--shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+				--shadow-lg: 0 12px 32px rgba(0,0,0,0.5);
+				--shadow-xl: 0 24px 48px rgba(0,0,0,0.6);
+				--shadow-amber: 0 4px 20px rgba(240, 165, 0, 0.2);
+				--shadow-inset: inset 0 1px 0 rgba(255,255,255,0.04);
+				
+				/* Border Radius */
+				--radius-sm: 4px;
+				--radius-md: 8px;
+				--radius-lg: 14px;
+				--radius-xl: 20px;
+				--radius-full: 9999px;
+				
+				/* Spacing */
+				--space-1: 4px;
+				--space-2: 8px;
+				--space-3: 12px;
+				--space-4: 16px;
+				--space-5: 20px;
+				--space-6: 24px;
+				--space-8: 32px;
+				--space-10: 40px;
+				--space-12: 48px;
+				
+				/* Motion */
+				--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+				--ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+				--duration-fast: 120ms;
+				--duration-normal: 200ms;
+				--duration-slow: 350ms;
+			}
+			
+			html,
+			body {
+				margin: 0;
+				padding: 0;
+				height: 100%;
+				width: 100%;
+				background: #0e0e14;
+				font-family: var(--font-body);
+				color: var(--text-primary);
+				-webkit-font-smoothing: antialiased;
+				-moz-osx-font-smoothing: grayscale;
+			}
+			
+			* {
+				box-sizing: border-box;
+			}
+			
+			*:focus-visible {
+				outline: 2px solid var(--amber-500);
+				outline-offset: 2px;
+			}
+			
+			/* Selection color */
+			::selection {
+				background: var(--amber-glow-strong);
+				color: var(--amber-50);
+			}
+			
+			/* Leaflet Control Overrides - Dark Theme */
+			.leaflet-control-zoom a,
+			.leaflet-control-attribution {
+				background: var(--panel-bg) !important;
+				color: var(--text-secondary) !important;
+				border-color: var(--panel-border) !important;
+			}
+			
+			.leaflet-control-zoom a:hover {
+				background: var(--panel-elevated) !important;
+				color: var(--text-primary) !important;
+				border-color: var(--panel-border-hover) !important;
+			}
+			
+			.leaflet-control-attribution {
+				font-size: 10px !important;
+				font-family: var(--font-mono) !important;
+				backdrop-filter: blur(8px);
+			}
+			
+			.leaflet-control-attribution a {
+				color: var(--amber-400) !important;
+			}
+			
+			/* Leaflet Bar */
+			.leaflet-bar {
+				border: 1px solid var(--panel-border) !important;
+				box-shadow: var(--shadow-lg) !important;
+			}
+			
+			.leaflet-bar a {
+				background: var(--panel-bg) !important;
+				border-bottom-color: var(--panel-border) !important;
+				color: var(--text-secondary) !important;
+			}
+			
+			.leaflet-bar a:hover {
+				background: var(--panel-elevated) !important;
+				color: var(--amber-400) !important;
+			}
+			
+			/* Leaflet Popup Dark Theme */
+			.leaflet-popup-content-wrapper,
+			.leaflet-popup-tip {
+				background: var(--panel-surface) !important;
+				color: var(--text-primary) !important;
+				box-shadow: var(--shadow-xl) !important;
+			}
+			
+			.leaflet-popup-content {
+				font-family: var(--font-body) !important;
+			}
+			
+			.leaflet-popup-close-button {
+				color: var(--text-muted) !important;
+			}
+			
+			.leaflet-popup-close-button:hover {
+				color: var(--text-primary) !important;
+			}
+			
+			@media (prefers-reduced-motion: reduce) {
+				*,
+				*::before,
+				*::after {
+					animation-duration: 0.01ms !important;
+					animation-iteration-count: 1 !important;
+					transition-duration: 0.01ms !important;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<Map />
+		<NavigationPanel />
+		
+		<!-- Mode Toggle Button -->
+		<button id="mode-toggle">
+			Admin Mode
+		</button>
+		
+		<script>
+			const urlParams = new URLSearchParams(window.location.search);
+			const currentMode = urlParams.get('mode') || 'user';
+			
+			const debugUI = document.getElementById('debug-ui');
+			const navPanel = document.getElementById('nav-panel');
+			const modeToggle = document.getElementById('mode-toggle');
+			
+			function updateModeUI() {
+				if (currentMode === 'admin') {
+					if (debugUI) debugUI.style.display = 'flex';
+					if (navPanel) navPanel.style.display = 'none';
+					if (modeToggle) modeToggle.textContent = 'User Mode';
+				} else {
+					if (debugUI) debugUI.style.display = 'none';
+					if (navPanel) navPanel.style.display = 'block';
+					if (modeToggle) modeToggle.textContent = 'Admin Mode';
+				}
+			}
+			
+			updateModeUI();
+			
+			if (modeToggle) {
+				modeToggle.addEventListener('click', () => {
+					const newMode = currentMode === 'admin' ? 'user' : 'admin';
+					window.location.search = `?mode=${newMode}`;
+				});
+			}
+		</script>
+		
+		<style>
+			#mode-toggle {
+				position: fixed;
+				top: 16px;
+				right: 16px;
+				z-index: 1001;
+				padding: 8px 14px;
+				background: var(--panel-bg);
+				color: var(--text-secondary);
+				border: 1px solid var(--panel-border);
+				border-radius: var(--radius-md);
+				font-weight: 600;
+				cursor: pointer;
+				font-size: 11px;
+				font-family: var(--font-mono);
+				letter-spacing: 0.5px;
+				text-transform: uppercase;
+				transition: all var(--duration-normal) var(--ease-out);
+				backdrop-filter: blur(12px);
+			}
+			
+			@media (min-width: 768px) {
+				#mode-toggle {
+					bottom: 20px;
+					top: auto;
+					right: 20px;
+					padding: 10px 18px;
+					font-size: 12px;
+				}
+			}
+			
+			#mode-toggle:hover,
+			#mode-toggle:active {
+				border-color: var(--amber-500);
+				color: var(--amber-400);
+				box-shadow: var(--shadow-amber);
+			}
+		</style>
+	</body>
+</html>

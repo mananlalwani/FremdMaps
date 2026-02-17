@@ -1,0 +1,161 @@
+---
+// Favorites.astro - Display and manage favorite destinations
+---
+
+<div class="favorites" id="favorites-container" style="display: none;">
+  <div class="favorites-header">
+    <span class="section-label">Favorites</span>
+  </div>
+  <div id="favorites-list" class="favorites-list">
+    <!-- Populated dynamically -->
+  </div>
+</div>
+
+<style is:global>
+  .favorites {
+    margin: 0 0 var(--space-4) 0;
+    padding: 16px;
+    background: var(--panel-surface);
+    border: 1px solid var(--amber-glow-strong);
+    border-radius: var(--radius-lg);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  /* Subtle amber glow at top edge */
+  .favorites::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--amber-500), transparent);
+  }
+
+  .favorites-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .favorites .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--amber-500);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-family: var(--font-mono);
+  }
+
+  .favorites-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .favorite-item {
+    padding: 12px 14px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-size: 15px;
+    color: var(--text-primary);
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  @media (min-width: 768px) {
+    .favorite-item {
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+  }
+
+  .favorite-item:hover,
+  .favorite-item:active {
+    background: var(--amber-glow);
+    border-color: rgba(240, 165, 0, 0.15);
+  }
+
+  .favorite-icon {
+    font-size: 18px;
+    opacity: 0.7;
+    color: var(--amber-400);
+  }
+  
+  @media (min-width: 768px) {
+    .favorite-icon {
+      font-size: 14px;
+      opacity: 0.6;
+    }
+  }
+
+  .favorite-name {
+    flex: 1;
+    color: var(--text-primary);
+    font-weight: 600;
+    font-family: var(--font-body);
+    font-size: 15px;
+  }
+  
+  @media (min-width: 768px) {
+    .favorite-name {
+      font-size: 13px;
+    }
+  }
+
+  .favorite-category {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+  }
+
+  .favorite-unfav {
+    padding: 4px 8px;
+    background: transparent;
+    border: none;
+    color: var(--amber-500);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    transition: all var(--duration-normal) var(--ease-out);
+    opacity: 0.7;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .favorite-unfav:hover,
+  .favorite-unfav:active {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  
+  @media (min-width: 768px) {
+    .favorite-unfav {
+      padding: 2px 6px;
+      font-size: 14px;
+      opacity: 0.5;
+    }
+  }
+
+  .favorites-empty {
+    padding: var(--space-4);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  .favorites-hint {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+  }
+</style>
