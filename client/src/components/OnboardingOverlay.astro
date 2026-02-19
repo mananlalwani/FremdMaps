@@ -1,0 +1,330 @@
+<!-- First-time user onboarding overlay -->
+<!-- Shown only once, dismissed via localStorage flag -->
+
+<div id="onboarding-overlay" aria-modal="true" role="dialog" aria-label="Welcome to Wayfinder">
+  <div id="onboarding-card">
+
+    <!-- Ambient glow decoration -->
+    <div class="card-glow"></div>
+
+    <!-- Header -->
+    <div class="ob-header">
+      <span class="ob-eyebrow">Getting started</span>
+      <h2 class="ob-title">Wayfinder</h2>
+      <div class="ob-rule"></div>
+    </div>
+
+    <!-- Steps -->
+    <ol class="ob-steps">
+      <li class="ob-step">
+        <div class="step-number">1</div>
+        <div class="step-body">
+          <strong>Type a room number</strong>
+          <span>Enter where you are and where you want to go — e.g. "129" or "office"</span>
+        </div>
+      </li>
+      <li class="ob-step">
+        <div class="step-number">2</div>
+        <div class="step-body">
+          <strong>Hit Navigate</strong>
+          <span>An amber path will appear on the map guiding you to your destination</span>
+        </div>
+      </li>
+      <li class="ob-step">
+        <div class="step-number">3</div>
+        <div class="step-body">
+          <strong>Switch floors automatically</strong>
+          <span>Multi-floor routes are handled — a banner will prompt you when to change floors</span>
+        </div>
+      </li>
+    </ol>
+
+    <!-- Dismiss -->
+    <button id="onboarding-dismiss" class="ob-btn">
+      Let's go
+      <svg class="ob-arrow" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+
+  </div>
+</div>
+
+<style>
+  #onboarding-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(10, 10, 16, 0.85);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+
+    /* Entrance animation */
+    animation: overlay-in var(--duration-slow, 350ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  }
+
+  #onboarding-overlay.dismissing {
+    animation: overlay-out 220ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  }
+
+  @keyframes overlay-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes overlay-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+  }
+
+  #onboarding-card {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    background: var(--panel-bg, #16161e);
+    border: 1px solid var(--panel-border, rgba(255,255,255,0.06));
+    border-radius: var(--radius-xl, 20px);
+    padding: 32px 28px 28px;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
+    overflow: hidden;
+
+    /* Card entrance — slides up slightly */
+    animation: card-in var(--duration-slow, 350ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+    animation-delay: 60ms;
+  }
+
+  @keyframes card-in {
+    from {
+      opacity: 0;
+      transform: translateY(20px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* Ambient amber glow in top-right corner */
+  .card-glow {
+    position: absolute;
+    top: -60px;
+    right: -60px;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(240, 165, 0, 0.18) 0%, transparent 70%);
+    pointer-events: none;
+    border-radius: 50%;
+  }
+
+  /* ── Header ── */
+  .ob-header {
+    margin-bottom: 28px;
+  }
+
+  .ob-eyebrow {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--font-mono, monospace);
+    text-transform: uppercase;
+    letter-spacing: 2.5px;
+    color: var(--amber-500, #f0a500);
+    margin-bottom: 8px;
+  }
+
+  .ob-title {
+    margin: 0;
+    font-size: 36px;
+    font-weight: 400;
+    font-family: var(--font-display, serif);
+    color: var(--text-primary, #e8e6e1);
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+  }
+
+  .ob-rule {
+    width: 36px;
+    height: 2px;
+    background: var(--amber-500, #f0a500);
+    margin-top: 14px;
+    border-radius: 1px;
+  }
+
+  /* ── Steps ── */
+  .ob-steps {
+    list-style: none;
+    margin: 0 0 28px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .ob-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    animation: step-in var(--duration-slow, 350ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  }
+
+  .ob-step:nth-child(1) { animation-delay: 140ms; }
+  .ob-step:nth-child(2) { animation-delay: 210ms; }
+  .ob-step:nth-child(3) { animation-delay: 280ms; }
+
+  @keyframes step-in {
+    from {
+      opacity: 0;
+      transform: translateX(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .step-number {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--panel-elevated, #262636);
+    border: 1px solid var(--amber-500, #f0a500);
+    color: var(--amber-400, #ffca28);
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+  }
+
+  .step-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .step-body strong {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary, #e8e6e1);
+    font-family: var(--font-body, sans-serif);
+  }
+
+  .step-body span {
+    font-size: 13px;
+    color: var(--text-secondary, #9895a3);
+    font-family: var(--font-body, sans-serif);
+    line-height: 1.5;
+  }
+
+  /* ── Dismiss button ── */
+  .ob-btn {
+    width: 100%;
+    padding: 14px 20px;
+    background: linear-gradient(135deg, var(--amber-500, #f0a500) 0%, var(--amber-600, #e09200) 100%);
+    color: var(--panel-bg, #16161e);
+    border: none;
+    border-radius: var(--radius-md, 8px);
+    font-size: 15px;
+    font-weight: 700;
+    font-family: var(--font-body, sans-serif);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 20px rgba(240, 165, 0, 0.25);
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+
+    animation: step-in var(--duration-slow, 350ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+    animation-delay: 340ms;
+  }
+
+  /* Shimmer sweep */
+  .ob-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s;
+  }
+
+  .ob-btn:hover::before { left: 100%; }
+
+  .ob-btn:hover {
+    background: linear-gradient(135deg, var(--amber-400, #ffca28) 0%, var(--amber-500, #f0a500) 100%);
+    box-shadow: 0 4px 28px rgba(240, 165, 0, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .ob-btn:active {
+    transform: translateY(0) scale(0.98);
+    box-shadow: 0 2px 8px rgba(240, 165, 0, 0.2);
+  }
+
+  .ob-arrow {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .ob-btn:hover .ob-arrow {
+    transform: translateX(3px);
+  }
+
+  /* Mobile tweak */
+  @media (max-width: 480px) {
+    #onboarding-card {
+      padding: 28px 20px 24px;
+    }
+
+    .ob-title {
+      font-size: 30px;
+    }
+  }
+</style>
+
+<script>
+  const STORAGE_KEY = 'wayfinder_onboarded';
+
+  const overlay = document.getElementById('onboarding-overlay');
+  const dismissBtn = document.getElementById('onboarding-dismiss');
+
+  // Only show if first time
+  if (localStorage.getItem(STORAGE_KEY)) {
+    overlay?.remove();
+  }
+
+  dismissBtn?.addEventListener('click', () => {
+    localStorage.setItem(STORAGE_KEY, '1');
+    overlay?.classList.add('dismissing');
+    overlay?.addEventListener('animationend', () => overlay.remove(), { once: true });
+  });
+
+  // Also dismiss on backdrop click
+  overlay?.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      dismissBtn?.click();
+    }
+  });
+
+  // Dismiss on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && overlay?.isConnected) {
+      dismissBtn?.click();
+    }
+  });
+</script>

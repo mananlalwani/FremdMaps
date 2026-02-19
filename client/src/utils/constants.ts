@@ -8,7 +8,7 @@ export const MAP_CONFIG = {
   IMAGE_HEIGHT: 4675,
   MIN_ZOOM: -5,
   MAX_ZOOM: 2,
-  MAX_HALLWAY_DISTANCE: 600, // Maximum distance for hallway connections (in pixels)
+  MAX_HALLWAY_DISTANCE: 800, // Maximum distance for hallway connections (in pixels)
   PATH_SIMPLIFICATION_ANGLE: 30, // Angle threshold for path simplification (in degrees)
 } as const;
 
@@ -37,7 +37,7 @@ export const UI_CONFIG = {
   SEARCH_DEBOUNCE_MS: 150,
   STATUS_MESSAGE_TIMEOUT_MS: 5000,
   ROUTE_PATH_COLOR: '#f0a500', // Amber accent
-  ROUTE_PATH_WEIGHT: 5,
+  ROUTE_PATH_WEIGHT: 6,
 } as const;
 
 // Geometry Constants

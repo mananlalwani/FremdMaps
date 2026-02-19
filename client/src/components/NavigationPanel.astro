@@ -13,7 +13,6 @@ import Favorites from './Favorites.astro'
   <div class="panel-header">
     <span class="floor-label">Floor 2</span>
     <h2>Wayfinder</h2>
-    <p class="panel-subtitle">Indoor Navigation System</p>
     <div class="header-rule"></div>
   </div>
   
@@ -25,14 +24,11 @@ import Favorites from './Favorites.astro'
   
   <!-- Start Location -->
   <div class="input-group" style="position: relative;">
-    <label for="start-input">
-      <span class="label-icon">📍</span>
-      Starting Point
-    </label>
+    <label for="start-input">From</label>
     <input 
       type="text" 
       id="start-input" 
-      placeholder="e.g., Room 221 or Main Office"
+      placeholder="Room number or name"
       autocomplete="off"
       data-search-input="start"
     />
@@ -43,14 +39,11 @@ import Favorites from './Favorites.astro'
   
   <!-- Destination -->
   <div class="input-group" style="position: relative;">
-    <label for="end-input">
-      <span class="label-icon">🎯</span>
-      Destination
-    </label>
+    <label for="end-input">To</label>
     <input 
       type="text" 
       id="end-input" 
-      placeholder="e.g., Room 129 or Library"
+      placeholder="Room number or name"
       autocomplete="off"
       data-search-input="end"
     />
@@ -60,78 +53,21 @@ import Favorites from './Favorites.astro'
   </div>
   
   <div class="button-group">
-    <button id="find-route-btn" class="primary">
-      <span class="btn-icon">🧭</span>
-      Navigate
-    </button>
-    <button id="clear-route-btn" class="secondary">
-      <span class="btn-icon">✕</span>
-      Clear
-    </button>
+    <button id="find-route-btn" class="primary">Navigate</button>
+    <button id="clear-route-btn" class="secondary">Clear</button>
   </div>
-  
-  <!-- Quick Actions Section -->
+
   <div class="quick-actions">
-    <span class="section-label">Quick Actions</span>
     <button id="find-bathroom-btn" class="quick-action-btn">
-      <span class="quick-action-icon">🚻</span>
-      <span>Find Nearest Bathroom</span>
+      🚻 Find Nearest Bathroom
     </button>
   </div>
-  
-  <!-- Route Status -->
+
+  <!-- Route / empty status text -->
   <div id="route-status" style="display: none;">
-    <div class="route-info">
-      <div class="status-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-      </div>
-      <div class="status-text">
-        <strong id="route-status-title">Route found!</strong>
-        <p id="route-status-details">Follow the path on the map</p>
-      </div>
-    </div>
+    <p id="route-status-details" class="status-line">Follow the amber path on the map</p>
   </div>
-  
-  <!-- Empty State -->
-  <div id="empty-state">
-    <div class="welcome-header">
-      <span class="welcome-icon">👋</span>
-      <h3 style="margin: 0; font-size: 18px; font-weight: 600; color: var(--text-primary);">
-        Welcome!
-      </h3>
-    </div>
-    <p style="margin: 12px 0 16px; line-height: 1.6; color: var(--text-secondary);">
-      Find your way around the building with turn-by-turn directions.
-    </p>
-    
-    <div class="feature-list">
-      <div class="feature-item">
-        <span class="feature-icon">🔍</span>
-        <span>Search rooms by number or name</span>
-      </div>
-      <div class="feature-item">
-        <span class="feature-icon">🗺️</span>
-        <span>Automatic multi-floor navigation</span>
-      </div>
-      <div class="feature-item">
-        <span class="feature-icon">🚻</span>
-        <span>Locate nearest facilities</span>
-      </div>
-    </div>
-    
-    <!-- Quick Demo Examples -->
-    <div class="demo-section">
-      <p class="demo-header">Try an example:</p>
-      <div class="demo-buttons">
-        <button class="demo-btn" data-from="253" data-to="129">
-          <span>253 → 129</span>
-        </button>
-        <button class="demo-btn" data-from="221" data-to="124">
-          <span>221 → 124</span>
-        </button>
-      </div>
-    </div>
-  </div>
+  <div id="empty-state"></div>
 </div>
 
 <style>
@@ -286,16 +222,6 @@ import Favorites from './Favorites.astro'
     line-height: 1.1;
   }
   
-  .panel-subtitle {
-    margin: 4px 0 0 0;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    font-family: var(--font-mono);
-  }
-  
   @media (min-width: 768px) {
     #nav-panel h2 {
       font-size: 36px;
@@ -308,17 +234,6 @@ import Favorites from './Favorites.astro'
     background: var(--amber-500);
     margin-top: 16px;
     border-radius: 1px;
-  }
-  
-  .section-label {
-    display: block;
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    font-family: var(--font-mono);
-    margin-bottom: var(--space-3);
   }
   
   .input-group {
@@ -352,10 +267,6 @@ import Favorites from './Favorites.astro'
     display: flex;
     align-items: center;
     gap: 6px;
-  }
-  
-  .label-icon {
-    font-size: 14px;
   }
   
   .input-group input {
@@ -415,11 +326,6 @@ import Favorites from './Favorites.astro'
     align-items: center;
     justify-content: center;
     gap: 8px;
-  }
-  
-  .btn-icon {
-    font-size: 16px;
-    line-height: 1;
   }
   
   @media (min-width: 768px) {
@@ -484,15 +390,7 @@ import Favorites from './Favorites.astro'
   }
   
   .quick-actions {
-    margin: 20px 0;
-    padding: 16px;
-    background: var(--panel-surface);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--panel-border);
-  }
-  
-  .quick-actions .section-label {
-    margin-bottom: var(--space-3);
+    margin: 12px 0 0 0;
   }
   
   .quick-action-btn {
@@ -511,10 +409,7 @@ import Favorites from './Favorites.astro'
     align-items: center;
     justify-content: center;
     gap: 8px;
-  }
-  
-  .quick-action-icon {
-    font-size: 18px;
+    -webkit-tap-highlight-color: transparent;
   }
   
   .quick-action-btn:hover {
@@ -527,180 +422,24 @@ import Favorites from './Favorites.astro'
   .quick-action-btn:active {
     transform: scale(0.98);
   }
-  
-  .demo-btn {
-    padding: 10px 16px !important;
-    background: var(--panel-elevated) !important;
-    border: 1px solid var(--panel-border) !important;
-    color: var(--text-secondary) !important;
-    border-radius: var(--radius-md) !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    cursor: pointer;
-    transition: all var(--duration-normal) var(--ease-out);
-    font-family: var(--font-mono) !important;
-    -webkit-tap-highlight-color: transparent;
-    flex: 1;
-  }
-  
-  .demo-btn:hover {
-    border-color: var(--amber-500) !important;
-    color: var(--amber-400) !important;
-    background: var(--amber-glow) !important;
-    transform: translateY(-1px);
-  }
-  
-  .demo-btn:active {
-    transform: scale(0.97);
-  }
-  
-  @media (min-width: 768px) {
-    .demo-btn {
-      font-size: 11px !important;
-      padding: 8px 12px !important;
-    }
-  }
-  
-  /* Empty State Styles */
-  #empty-state {
-    animation: fadeIn 0.4s var(--ease-out);
-  }
-  
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-  
-  .welcome-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-  }
-  
-  .welcome-icon {
-    font-size: 28px;
-    line-height: 1;
-  }
-  
-  .feature-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin: 16px 0;
-  }
-  
-  .feature-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    background: var(--panel-surface);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--panel-border);
-    font-size: 14px;
-    color: var(--text-secondary);
-    transition: all var(--duration-normal) var(--ease-out);
-  }
-  
-  .feature-item:hover {
-    background: var(--panel-elevated);
-    border-color: var(--panel-border-hover);
-  }
-  
-  .feature-icon {
-    font-size: 20px;
-    min-width: 24px;
-    text-align: center;
-  }
-  
-  .demo-section {
-    margin-top: 20px;
-    padding-top: 20px;
-    border-top: 1px solid var(--panel-border);
-  }
-  
-  .demo-header {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  
-  .demo-buttons {
-    display: flex;
-    gap: 8px;
-  }
-  
-  @keyframes status-appear {
-    from {
-      opacity: 0;
-      transform: scale(0.96);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-  
-  .route-info {
-    margin: 20px 0;
-    padding: 16px;
-    background: linear-gradient(135deg, var(--success-muted) 0%, rgba(74, 222, 128, 0.08) 100%);
-    border: 1px solid rgba(74, 222, 128, 0.3);
-    border-radius: var(--radius-lg);
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    animation: status-appear 0.3s var(--ease-out);
-    box-shadow: 0 4px 12px rgba(74, 222, 128, 0.1);
+
+  /* Route status */
+  #route-status {
+    margin-top: 16px;
   }
 
-  .status-icon {
-    width: 40px;
-    height: 40px;
-    background: linear-gradient(135deg, var(--success) 0%, #22c55e 100%);
-    color: white;
-    border-radius: var(--radius-full);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    box-shadow: 0 2px 8px rgba(74, 222, 128, 0.3);
-  }
-
-  .status-text strong {
-    display: block;
-    color: var(--success);
-    font-size: 15px;
-    font-weight: 700;
-    margin-bottom: 2px;
-  }
-
-  .status-text p {
+  .status-line {
     margin: 0;
+    font-size: 13px;
     color: var(--text-secondary);
-    font-size: 13px;
+    font-family: var(--font-body);
   }
   
+  /* Empty state (JS-injected content) */
   #empty-state {
-    text-align: center;
-    padding: var(--space-8) var(--space-4);
     color: var(--text-muted);
-  }
-  
-  #empty-state p {
-    margin: 0 0 var(--space-2) 0;
-    line-height: 1.5;
     font-size: 13px;
+    padding: var(--space-4) 0;
   }
   
   /* Scrollbar styling */

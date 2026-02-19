@@ -23,6 +23,7 @@
     Navigate
 </button>
 
+
 <!-- Debug UI - Only visible with ?admin=true URL parameter -->
 <div id="debug-ui" style="display: none;">
     <button id="toggle-debug">Enable Debug Mode</button>
@@ -87,7 +88,7 @@
 
     // State
     let isDebugMode = false;
-    let currentMode = "room"; // 'room', 'waypoint', 'bathroom', 'stairway', 'connect-stairway', or 'wall'
+    let currentMode = "room"; // 'room', 'waypoint', 'bathroom', 'stairway', 'connect-stairway', 'wall'
     let currentFloor = FLOORS.DEFAULT; // Current active floor
     
     // Stairway connection state
@@ -113,6 +114,7 @@
     let routeMarkers: L.Marker[] = [];
     let graphEdges: L.Polyline[] = [];
     let showingGraph = false;
+
 
     // Search State
     let searchDebounceTimer: number | null = null;
@@ -459,6 +461,7 @@
             }
             const walls = await wallsRes.json();
             collectedWalls = walls;
+
             
             // Render the loaded data on the map
             renderMapData();
@@ -468,8 +471,8 @@
             // Load all nodes from all floors for cross-floor navigation
             await loadAllNodesAllFloors();
             
-            // Initialize navigation after loading all nodes
-            initializeNavigation();
+            // Initialize navigation after loading all nodes (async)
+            await initializeNavigation();
         } catch (err) {
             logger.error("Failed to load data:", err);
             const emptyState = document.getElementById('empty-state');
@@ -492,11 +495,9 @@
                 if (nodesRes.ok) {
                     const floorNodes = await nodesRes.json();
                     
-                    // Tag each node with its floor if it doesn't have one
+                    // Tag each node with its floor (always set to ensure consistency)
                     floorNodes.forEach(node => {
-                        if (!node.floor) {
-                            node.floor = floor.id;
-                        }
+                        node.floor = floor.id;
                     });
                     
                     allNodes.push(...floorNodes);
@@ -514,12 +515,43 @@
         }
     }
 
+    // --- LOAD ALL WALLS FROM ALL FLOORS (for cross-floor navigation) ---
+    async function loadAllFloorsWalls(): Promise<Wall[]> {
+        try {
+            const apiUrl = import.meta.env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL;
+            const allWalls: Wall[] = [];
+            
+            // Load walls from each floor and TAG them with floor property
+            for (const floor of FLOORS.AVAILABLE) {
+                const wallsRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.WALLS}?floor=${floor.id}`);
+                if (wallsRes.ok) {
+                    const floorWallsRaw = await wallsRes.json();
+                    
+                    // Convert and tag each wall with its floor
+                    const floorWalls = convertWallData(floorWallsRaw);
+                    floorWalls.forEach(wall => {
+                        wall.floor = floor.id;
+                    });
+                    
+                    allWalls.push(...floorWalls);
+                    console.log(`Loaded ${floorWalls.length} walls from Floor ${floor.id}`);
+                }
+            }
+            
+            console.log(`Total walls across all floors: ${allWalls.length}`);
+            return allWalls;
+        } catch (err) {
+            logger.error("Failed to load walls from all floors:", err);
+            return [];
+        }
+    }
+
     // --- NAVIGATION LOGIC ---
     // Web Worker for graph building (prevents UI freeze)
     let graphWorker: Worker | null = null;
     let isGraphBuilding = false; // Race condition guard
     
-    function initializeNavigation() {
+    async function initializeNavigation() {
         if (allNodesAllFloors.length < 2) {
             logger.warn('Not enough nodes for navigation (need at least 2)');
             return;
@@ -531,8 +563,9 @@
             return;
         }
         
-        // Convert walls to geometry format (current floor walls only)
-        wallObjects = convertWallData(collectedWalls);
+        // Load and convert walls from ALL floors for cross-floor pathfinding
+        // (Walls are already converted and tagged with floor property)
+        wallObjects = await loadAllFloorsWalls();
         
         // Build visibility graph using Web Worker (non-blocking)
         // IMPORTANT: Use all nodes from all floors for cross-floor navigation
@@ -577,22 +610,9 @@
                     // Populate room datalist for autocomplete
                     initializeSearchEnhancements();
                     
-                    // Restore empty state
+                    // Clear loading state
                     if (emptyState) {
-                        emptyState.innerHTML = `
-                            <p style="font-size: 15px; line-height: 1.6; margin-bottom: 12px;">
-                                <strong style="color: var(--amber-400);">Welcome to School Navigation!</strong>
-                            </p>
-                            <p style="margin-bottom: 8px;">Find your way around the building:</p>
-                            <ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); font-size: 14px; line-height: 1.8;">
-                                <li>Type a room number (e.g., "221", "129")</li>
-                                <li>Search for facilities (e.g., "bathroom")</li>
-                                <li>Navigate between floors automatically</li>
-                            </ul>
-                            <p style="margin-top: 16px; font-size: 13px; color: var(--text-muted);">
-                                💡 Tip: Click the 🚻 button to find the nearest bathroom
-                            </p>
-                        `;
+                        emptyState.innerHTML = '';
                     }
                     
                     isGraphBuilding = false; // Clear guard
@@ -613,20 +633,7 @@
                 initializeSearchEnhancements();
                 
                 if (emptyState) {
-                    emptyState.innerHTML = `
-                        <p style="font-size: 15px; line-height: 1.6; margin-bottom: 12px;">
-                            <strong style="color: var(--amber-400);">Welcome to School Navigation!</strong>
-                        </p>
-                        <p style="margin-bottom: 8px;">Find your way around the building:</p>
-                        <ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); font-size: 14px; line-height: 1.8;">
-                            <li>Type a room number (e.g., "221", "129")</li>
-                            <li>Search for facilities (e.g., "bathroom")</li>
-                            <li>Navigate between floors automatically</li>
-                        </ul>
-                        <p style="margin-top: 16px; font-size: 13px; color: var(--text-muted);">
-                            💡 Tip: Click the 🚻 button to find the nearest bathroom
-                        </p>
-                    `;
+                    emptyState.innerHTML = '';
                 }
                 
                 isGraphBuilding = false; // Clear guard
@@ -996,20 +1003,21 @@
         setTimeout(() => {
             try {
                 // Try to use selected nodes from search dropdown first, fallback to text search
-                let startNode = selectedStartNode || findNodeByRoom(startRoom, collectedNodes) || findExactMatch(startRoom, collectedNodes);
-                let endNode = selectedEndNode || findNodeByRoom(endRoom, collectedNodes) || findExactMatch(endRoom, collectedNodes);
+                // Always search allNodesAllFloors (not collectedNodes) so cross-floor rooms are found
+                let startNode = selectedStartNode || findNodeByRoom(startRoom, allNodesAllFloors) || findExactMatch(startRoom, allNodesAllFloors);
+                let endNode = selectedEndNode || findNodeByRoom(endRoom, allNodesAllFloors) || findExactMatch(endRoom, allNodesAllFloors);
                 
-                // If still not found, try fuzzy search and use best match
+                // If still not found, try fuzzy search across all floors
                 if (!startNode) {
-                    const results = searchNodes(startRoom, collectedNodes, { limit: 1 });
-                    if (results.length > 0 && results[0].score < 0.6) {  // Accept if reasonably close
+                    const results = searchNodes(startRoom, allNodesAllFloors, { limit: 1 });
+                    if (results.length > 0 && results[0].score < 0.6) {
                         startNode = results[0].node;
                         searchLogger.log(`Using fuzzy match for start: ${startRoom} → ${startNode.rooms[0]}`);
                     }
                 }
                 
                 if (!endNode) {
-                    const results = searchNodes(endRoom, collectedNodes, { limit: 1 });
+                    const results = searchNodes(endRoom, allNodesAllFloors, { limit: 1 });
                     if (results.length > 0 && results[0].score < 0.6) {
                         endNode = results[0].node;
                         searchLogger.log(`Using fuzzy match for end: ${endRoom} → ${endNode.rooms[0]}`);
@@ -1028,6 +1036,10 @@
                 
                 // Run A* pathfinding across all floors
                 routeLogger.log(`Finding path from ${startRoom} to ${endRoom}...`);
+                console.log('[findRoute] startNode:', { uid: startNode.uid, rooms: startNode.rooms, floor: (startNode as any).floor });
+                console.log('[findRoute] endNode:', { uid: endNode.uid, rooms: endNode.rooms, floor: (endNode as any).floor });
+                console.log('[findRoute] allNodesAllFloors count:', allNodesAllFloors.length);
+                console.log('[findRoute] allNodesAllFloors sample floors:', allNodesAllFloors.slice(0,3).map((n:any) => n.floor));
                 const result = findPath(startNode.uid, endNode.uid, allNodesAllFloors, navigationGraph);
                 
                 if (!result.found) {
@@ -1086,9 +1098,15 @@
         // Store full path for multi-floor navigation
         currentRouteFullPath = path;
         
+        // DEBUG: inspect floor tags on path nodes
+        console.log('[displayRoute] path length:', path.length);
+        console.log('[displayRoute] path floors:', path.map(n => n.floor));
+        console.log('[displayRoute] path nodes:', path.map(n => ({ rooms: n.rooms, floor: n.floor, type: n.type })));
+        
         // Check if route crosses floors
         const floors = [...new Set(path.map(n => n.floor).filter(f => f))];
         const isMultiFloor = floors.length > 1;
+        console.log('[displayRoute] unique floors:', floors, '| isMultiFloor:', isMultiFloor);
         
         if (isMultiFloor) {
             routeLogger.log(`Multi-floor route detected: ${floors.join(', ')}`);
@@ -1111,23 +1129,13 @@
         // Update UI - show detailed route status
         const routeStatus = document.getElementById('route-status');
         const emptyState = document.getElementById('empty-state');
-        const statusTitle = document.getElementById('route-status-title');
         const statusDetails = document.getElementById('route-status-details');
         
         if (routeStatus) routeStatus.style.display = 'block';
         if (emptyState) emptyState.style.display = 'none';
         
-        // Calculate and display route details
-        if (statusTitle && statusDetails) {
-            // Format distance
-            const distanceMeters = Math.round(totalDistance);
-            const distanceStr = distanceMeters < 1000 
-                ? `${distanceMeters}m` 
-                : `${(distanceMeters / 1000).toFixed(1)}km`;
-            
-            statusTitle.textContent = `Route: ${distanceStr}`;
-            
-            // Add floor information if multi-floor
+        // Update status text
+        if (statusDetails) {
             if (isMultiFloor) {
                 const floorCount = floors.length;
                 statusDetails.textContent = `${floorCount} floors • Follow the amber path`;
@@ -1143,7 +1151,15 @@
             map.removeLayer(currentRoute);
             currentRoute = null;
         }
-        routeMarkers.forEach(m => map.removeLayer(m));
+        
+        // Properly clear all route markers including outline layers
+        routeMarkers.forEach(m => {
+            if (m.__isOutline) {
+                map.removeLayer(m.layer);
+            } else {
+                map.removeLayer(m);
+            }
+        });
         routeMarkers = [];
         
         if (currentRouteFullPath.length === 0) {
@@ -1164,7 +1180,12 @@
         const bannerFloor = document.getElementById('banner-floor');
         const bannerSwitchBtn = document.getElementById('banner-switch-btn');
         
-        if (banner && isMultiFloor) {
+        // Only show banner if the destination is on a different floor
+        // (if destination is already on current floor, no need to switch)
+        const destinationFloor = path[path.length - 1].floor;
+        const needsFloorSwitch = isMultiFloor && destinationFloor !== currentFloor;
+        
+        if (banner && needsFloorSwitch) {
             // Find the other floor(s) in the route
             const otherFloors = floorsInRoute.filter(f => f !== currentFloor);
             
@@ -1197,25 +1218,38 @@
         const simplifiedPath = simplifyPath(nodesOnCurrentFloor, MAP_CONFIG.PATH_SIMPLIFICATION_ANGLE);
         routeLogger.log('Simplified path length:', simplifiedPath.length)
         
-        // Draw path polyline with simplified coordinates
+        // Draw path with outline for better visibility (two polylines)
         const coordinates = simplifiedPath.map(n => [n.lat, n.lng]);
-        currentRoute = L.polyline(coordinates, {
-            color: UI_CONFIG.ROUTE_PATH_COLOR,
-            weight: UI_CONFIG.ROUTE_PATH_WEIGHT,
-            opacity: 0.9,
+        
+        // First layer: dark outline
+        const routeOutline = L.polyline(coordinates, {
+            color: '#000000',
+            weight: 10,
+            opacity: 0.5,
             lineCap: 'round',
             lineJoin: 'round',
-            className: 'route-path'
         }).addTo(map);
+        
+        // Second layer: bright path
+        currentRoute = L.polyline(coordinates, {
+            color: UI_CONFIG.ROUTE_PATH_COLOR,
+            weight: 6,
+            opacity: 1,
+            lineCap: 'round',
+            lineJoin: 'round',
+        }).addTo(map);
+        
+        // Store outline for cleanup
+        routeMarkers.push({ __isOutline: true, layer: routeOutline } as any);
         
         // Add start marker (if start is on this floor)
         const startNode = path[0];
         if (startNode.floor === currentFloor) {
             const startIcon = L.divIcon({
                 className: 'route-marker start',
-                html: '<div style="background: #16161e; color: #f0a500; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; font-family: JetBrains Mono, monospace; border: 2px solid #f0a500; box-shadow: 0 0 16px rgba(240,165,0,0.4)">A</div>',
-                iconSize: [30, 30],
-                iconAnchor: [15, 15]
+                html: `<div style="background: #4CAF50; color: white; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; font-family: 'JetBrains Mono', monospace; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3)">A</div>`,
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
             });
             
             const startMarker = L.marker([startNode.lat, startNode.lng], { icon: startIcon }).addTo(map);
@@ -1227,9 +1261,9 @@
         if (endNode.floor === currentFloor) {
             const endIcon = L.divIcon({
                 className: 'route-marker end',
-                html: '<div style="background: #f0a500; color: #16161e; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; font-family: JetBrains Mono, monospace; border: 2px solid #f0a500; box-shadow: 0 0 16px rgba(240,165,0,0.4)">B</div>',
-                iconSize: [30, 30],
-                iconAnchor: [15, 15]
+                html: `<div style="background: #f44336; color: white; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; font-family: 'JetBrains Mono', monospace; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3)">B</div>`,
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
             });
             
             const endMarker = L.marker([endNode.lat, endNode.lng], { icon: endIcon }).addTo(map);
@@ -1268,8 +1302,14 @@
         // Clear stored route path
         currentRouteFullPath = [];
         
-        // Remove route markers
-        routeMarkers.forEach(m => map.removeLayer(m));
+        // Remove route markers and outline layers
+        routeMarkers.forEach(m => {
+            if (m.__isOutline) {
+                map.removeLayer(m.layer);
+            } else {
+                map.removeLayer(m);
+            }
+        });
         routeMarkers = [];
         
         // Clear UI
@@ -1358,7 +1398,9 @@
         }, 10);
     }
 
+
     function onMapClick(e) {
+        
         console.log(`[DEBUG] Map clicked. Debug mode: ${isDebugMode}, Current mode: ${currentMode}`);
         
         if (!isDebugMode) return;
@@ -1385,7 +1427,7 @@
     }
 
     // --- NODE LOGIC ---
-    function handleRoomNodeClick(e) {
+    async function handleRoomNodeClick(e) {
         const input = prompt(
             "Enter Room IDs (comma separated, e.g. '201, 202'):",
         );
@@ -1414,11 +1456,11 @@
         
         // Rebuild graph if it exists
         if (navigationGraph) {
-            initializeNavigation();
+            await initializeNavigation();
         }
     }
 
-    function handleWaypointClick(e) {
+    async function handleWaypointClick(e) {
         const uid = crypto.randomUUID();
 
         const node = {
@@ -1436,19 +1478,16 @@
         
         // Rebuild graph if it exists
         if (navigationGraph) {
-            initializeNavigation();
+            await initializeNavigation();
         }
     }
 
-    function handleBathroomNodeClick(e) {
-        const bathroomName = prompt("Enter bathroom name (e.g., 'Bathroom A'):");
-        if (!bathroomName) return;
-        
+    async function handleBathroomNodeClick(e) {
         const uid = crypto.randomUUID();
         
         const node = {
             uid: uid,
-            rooms: [bathroomName],
+            rooms: ["bathroom"],
             lat: e.latlng.lat,
             lng: e.latlng.lng,
             type: "bathroom",
@@ -1465,15 +1504,9 @@
         }
     }
 
-    function handleStairwayNodeClick(e) {
-        const stairName = prompt("Enter stairway name (e.g., 'Stairway A'):");
+    async function handleStairwayNodeClick(e) {
+        const stairName = prompt("Enter stairway name (e.g., 'A', 'B'):\nStairways with the same name on different floors will connect automatically.");
         if (!stairName) return;
-        
-        const connectsInput = prompt(
-            "Enter connected floor node UIDs (comma-separated):\n" +
-            "Example: uid-from-floor1, uid-from-floor3\n" +
-            "(Leave blank if not yet connected)"
-        );
         
         const uid = crypto.randomUUID();
         
@@ -1484,9 +1517,7 @@
             lng: e.latlng.lng,
             type: "stairway",
             floor: currentFloor,
-            connectsTo: connectsInput 
-                ? connectsInput.split(',').map(s => s.trim()).filter(s => s.length > 0)
-                : []
+            connectsTo: [stairName]  // Connect by name - matches same-named stairway on other floors
         };
         
         collectedNodes.push(node);
@@ -1495,11 +1526,11 @@
         
         // Rebuild graph if it exists
         if (navigationGraph) {
-            initializeNavigation();
+            await initializeNavigation();
         }
     }
 
-    function handleStairwayConnectionClick(e) {
+    async function handleStairwayConnectionClick(e) {
         console.log(`[DEBUG] handleStairwayConnectionClick called at: ${e.latlng.lat}, ${e.latlng.lng}`);
         
         // Find if user clicked on a stairway marker
@@ -1555,7 +1586,7 @@
         }
         
         // Create bidirectional connection
-        connectStairways(firstStairwayForConnection, secondStairway);
+        await connectStairways(firstStairwayForConnection, secondStairway);
         
         // Reset selection
         resetStairwayConnection();
@@ -1583,7 +1614,7 @@
         return null;
     }
 
-    function connectStairways(stairway1: Node, stairway2: Node) {
+    async function connectStairways(stairway1: Node, stairway2: Node) {
         // Add bidirectional connections using NAMES (not UIDs)
         // This makes it easier for users - they just need to use the same stairway name
         if (!stairway1.connectsTo) {
@@ -1610,7 +1641,7 @@
         
         // Rebuild graph to include new connection
         if (navigationGraph) {
-            initializeNavigation();
+            await initializeNavigation();
         }
         
         updateUI();
@@ -1741,7 +1772,7 @@
         }
     }
 
-    function deleteNode(uid) {
+    async function deleteNode(uid) {
         if (confirm(`Delete node?`)) {
             if (nodeMarkers[uid]) {
                 map.removeLayer(nodeMarkers[uid]);
@@ -1752,7 +1783,7 @@
             
             // Rebuild graph
             if (navigationGraph) {
-                initializeNavigation();
+                await initializeNavigation();
             }
         }
     }
@@ -1971,6 +2002,7 @@
                 polyline.setStyle({ opacity: 1 });
             });
             
+            
             collectedWalls.forEach((wallPts) => {
                 // Check if wall already exists
                 const exists = wallPolylines.some(poly => {
@@ -2001,6 +2033,7 @@
             wallPolylines.forEach((polyline) => {
                 polyline.setStyle({ opacity: 0 });
             });
+            
             
             // Also hide graph edges if visible
             if (showingGraph) {
@@ -2035,6 +2068,9 @@
     if (modeWallBtn) {
         modeWallBtn.addEventListener("click", () => setMode("wall"));
     }
+    
+    
+    
     
     if (toggleGraphBtn) {
         toggleGraphBtn.addEventListener("click", toggleGraphVisualization);
@@ -2074,6 +2110,7 @@
                     throw new Error(`Failed to save walls: ${errorData.message || wallsRes.statusText}`);
                 }
             }
+            
             
             alert(`Data saved successfully for Floor ${currentFloor}!`);
         } catch (err) {
@@ -2232,11 +2269,6 @@
         width: 100vw;
         background: #1a1a24;
         position: relative;
-    }
-    
-    /* Custom route path styling */
-    :global(.route-path) {
-        filter: drop-shadow(0 2px 8px rgba(240, 165, 0, 0.5));
     }
     
     /* Route marker overrides */
@@ -2493,4 +2525,5 @@
     :global(.stairway-marker-selected) {
         animation: pulse 1s infinite;
     }
+
 </style>

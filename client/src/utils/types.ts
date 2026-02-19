@@ -51,6 +51,7 @@ export interface SearchHistoryEntry {
 export interface Wall {
   start: Point
   end: Point
+  floor?: string  // Floor identifier (e.g., "1", "2")
 }
 
 export interface Edge {
@@ -64,11 +65,4 @@ export interface PathResult {
   path: Node[]       // Ordered list of nodes from start to goal
   distance: number   // Total path distance
   found: boolean     // Whether a path exists
-}
-
-export interface Direction {
-  text: string           // "Head northeast toward Room 205"
-  distance: number       // Distance in pixels
-  fromNode: string
-  toNode: string
 }

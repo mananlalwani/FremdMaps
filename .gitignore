@@ -43,3 +43,6 @@ temp/
 
 # Debug
 .cache/
+
+# Cloudflare tunnel ephemeral URL
+mobile/.tunnel-url

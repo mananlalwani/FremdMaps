@@ -34,6 +34,18 @@ export function buildVisibilityGraph(
   console.log(`Building visibility graph for ${nodes.length} nodes and ${walls.length} walls...`)
   console.log(`Max connection distance: ${maxDistance} pixels`)
   
+  // Group walls by floor for efficient lookup
+  const wallsByFloor = new Map<string, Wall[]>()
+  walls.forEach(wall => {
+    if (wall.floor) {
+      if (!wallsByFloor.has(wall.floor)) {
+        wallsByFloor.set(wall.floor, [])
+      }
+      wallsByFloor.get(wall.floor)!.push(wall)
+    }
+  })
+  console.log(`Walls grouped by floor:`, Array.from(wallsByFloor.entries()).map(([f, w]) => `Floor ${f}: ${w.length} walls`))
+  
   // Check each pair of nodes
   let edgesAdded = 0
   let edgesSkippedDistance = 0
@@ -55,8 +67,32 @@ export function buildVisibilityGraph(
         continue
       }
       
+      // Only check walls on the same floor as the nodes
+      // (For cross-floor connections via stairways, see addStairwayConnections)
+      let relevantWalls: Wall[] = []
+      
+      if (n1.floor && n2.floor) {
+        if (n1.floor === n2.floor) {
+          // Both nodes on same floor - check walls on that floor only
+          relevantWalls = wallsByFloor.get(n1.floor) || []
+        } else {
+          // Nodes on different floors - skip (stairways will handle cross-floor connections)
+          edgesSkippedDistance++
+          continue
+        }
+      } else if (n1.floor) {
+        // Only n1 has floor info - use walls from n1's floor
+        relevantWalls = wallsByFloor.get(n1.floor) || []
+      } else if (n2.floor) {
+        // Only n2 has floor info - use walls from n2's floor
+        relevantWalls = wallsByFloor.get(n2.floor) || []
+      } else {
+        // Neither node has floor information - use all walls (backward compatibility)
+        relevantWalls = walls
+      }
+      
       // Check if there's a clear line of sight
-      if (hasLineOfSight(p1, p2, walls)) {
+      if (hasLineOfSight(p1, p2, relevantWalls)) {
         // Add bidirectional edge
         graph.get(n1.uid)!.push({ to: n2.uid, cost: dist })
         graph.get(n2.uid)!.push({ to: n1.uid, cost: dist })

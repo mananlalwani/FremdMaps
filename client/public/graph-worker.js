@@ -28,12 +28,15 @@
  * @property {number} lat - Latitude coordinate
  * @property {number} lng - Longitude coordinate
  * @property {string} [type] - Optional node type (waypoint, bathroom, stairway)
+ * @property {string} [floor] - Optional floor identifier
+ * @property {string[]} [connectsTo] - For stairways: identifiers of connected stairways
  */
 
 /**
  * @typedef {Object} Wall
  * @property {Point} start - Start point of wall
  * @property {Point} end - End point of wall
+ * @property {string} [floor] - Optional floor identifier
  */
 
 /**
@@ -105,10 +108,10 @@ function hasLineOfSight(p1, p2, walls) {
  * Build visibility graph for pathfinding
  * @param {Node[]} nodes - Array of navigation nodes
  * @param {Wall[]} walls - Array of wall segments
- * @param {number} [maxDistance=600] - Maximum connection distance
+ * @param {number} [maxDistance=800] - Maximum connection distance
  * @returns {Map<string, Edge[]>} Adjacency list graph
  */
-function buildVisibilityGraph(nodes, walls, maxDistance = 600) {
+function buildVisibilityGraph(nodes, walls, maxDistance = 800) {
   const graph = new Map()
 
   // Initialize empty adjacency lists
@@ -116,7 +119,27 @@ function buildVisibilityGraph(nodes, walls, maxDistance = 600) {
     graph.set(node.uid, [])
   }
 
+  // Group walls by floor for efficient lookup
+  const wallsByFloor = new Map()
+  for (const wall of walls) {
+    if (wall.floor) {
+      if (!wallsByFloor.has(wall.floor)) {
+        wallsByFloor.set(wall.floor, [])
+      }
+      wallsByFloor.get(wall.floor).push(wall)
+    }
+  }
+  
+  self.postMessage({ 
+    type: 'log', 
+    message: `Walls grouped by floor: ${Array.from(wallsByFloor.entries()).map(([f, w]) => `Floor ${f}: ${w.length}`).join(', ')}` 
+  })
+
   // Check all pairs of nodes
+  let edgesAdded = 0
+  let edgesSkippedDistance = 0
+  let edgesSkippedFloor = 0
+  
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
       const nodeA = nodes[i]
@@ -129,17 +152,47 @@ function buildVisibilityGraph(nodes, walls, maxDistance = 600) {
 
       // Skip if too far apart (optimization)
       if (maxDistance && dist > maxDistance) {
+        edgesSkippedDistance++
         continue
       }
 
+      // Only check walls on the same floor as the nodes
+      let relevantWalls = []
+      
+      if (nodeA.floor && nodeB.floor) {
+        if (nodeA.floor === nodeB.floor) {
+          // Both nodes on same floor - check walls on that floor only
+          relevantWalls = wallsByFloor.get(nodeA.floor) || []
+        } else {
+          // Nodes on different floors - skip (stairways will handle cross-floor connections)
+          edgesSkippedFloor++
+          continue
+        }
+      } else if (nodeA.floor) {
+        // Only nodeA has floor info - use walls from nodeA's floor
+        relevantWalls = wallsByFloor.get(nodeA.floor) || []
+      } else if (nodeB.floor) {
+        // Only nodeB has floor info - use walls from nodeB's floor
+        relevantWalls = wallsByFloor.get(nodeB.floor) || []
+      } else {
+        // Neither node has floor information - use all walls (backward compatibility)
+        relevantWalls = walls
+      }
+
       // Check line of sight
-      if (hasLineOfSight(p1, p2, walls)) {
+      if (hasLineOfSight(p1, p2, relevantWalls)) {
         // Add bidirectional edge (using 'cost' to match Edge type definition)
         graph.get(nodeA.uid).push({ to: nodeB.uid, cost: dist })
         graph.get(nodeB.uid).push({ to: nodeA.uid, cost: dist })
+        edgesAdded++
       }
     }
   }
+  
+  self.postMessage({ 
+    type: 'log', 
+    message: `Graph built: ${edgesAdded} edges, ${edgesSkippedDistance} skipped (distance), ${edgesSkippedFloor} skipped (different floors)` 
+  })
 
   // Add stairway connections for cross-floor navigation
   addStairwayConnections(nodes, graph)
