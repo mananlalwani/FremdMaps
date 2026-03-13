@@ -1,43 +1,48 @@
-# Astro Starter Kit: Minimal
+# client
 
-```sh
-pnpm create astro@latest -- --template minimal
+Astro frontend for the School Navigation App. Serves the interactive floor-plan map, search, and routing UI on **port 4321**.
+
+## Environment
+
+Create `client/.env` (not committed) with:
+
+```
+PUBLIC_API_URL=http://localhost:5173
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+This points the browser at the Express backend. In production, set it to the deployed server URL.
 
-## 🚀 Project Structure
+## Commands
 
-Inside of your Astro project, you'll see the following folders and files:
+Run from the `client/` directory (or prefix with `pnpm --filter client` from the repo root):
 
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
+| Command           | Action                                              |
+| :---------------- | :-------------------------------------------------- |
+| `pnpm dev`        | Start Astro dev server at `localhost:4321`          |
+| `pnpm build`      | Type-check and build to `dist/`                     |
+| `pnpm preview`    | Serve the production build locally                  |
+| `pnpm lint`       | ESLint                                              |
+| `pnpm format`     | Prettier                                            |
+| `pnpm test`       | Vitest (single run)                                 |
+| `pnpm test:watch` | Vitest watch mode                                   |
+
+## Structure
+
+```
+src/
+  components/     Map.astro (orchestrator), NavigationPanel.astro, OnboardingOverlay.astro
+  pages/          index.astro — single page; all CSS custom properties defined here
+  map/            map-state.ts, map-init.ts, route-display.ts, admin-editor.ts
+  utils/          types.ts, constants.ts, geometry.ts, graph.ts, pathfinding.ts,
+                  search.ts, storage.ts, logger.ts, kalman.ts
+  config/         featured.ts — featured rooms and search config
+
+public/           floor1.png, floor2.png — floor-plan images
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+## Key concepts
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
-
-Any static assets, like images, can be placed in the `public/` directory.
-
-## 🧞 Commands
-
-All commands are run from the root of the project, from a terminal:
-
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `pnpm install`             | Installs dependencies                            |
-| `pnpm dev`             | Starts local dev server at `localhost:4321`      |
-| `pnpm build`           | Build your production site to `./dist/`          |
-| `pnpm preview`         | Preview your build locally, before deploying     |
-| `pnpm astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `pnpm astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+- **Admin mode**: append `?admin` to the URL to enable map editing tools.
+- **Coordinate system**: Leaflet Simple CRS — `lat` = Y-axis, `lng` = X-axis (not real GPS).
+- **Graph**: built inline on the main thread via `buildVisibilityGraph` in `utils/graph.ts`; server-side A* is used for routing requests.
+- **Logging**: use named loggers from `utils/logger.ts` (`logger`, `graphLogger`, `routeLogger`, `searchLogger`) rather than raw `console.*`.
