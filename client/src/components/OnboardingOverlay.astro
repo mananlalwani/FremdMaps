@@ -232,7 +232,7 @@
     border: none;
     border-radius: var(--radius-md, 8px);
     font-size: 15px;
-    font-weight: 700;
+    font-weight: 600;
     font-family: var(--font-body, sans-serif);
     cursor: pointer;
     display: flex;
@@ -301,12 +301,24 @@
   const STORAGE_KEY = 'wayfinder_onboarded';
 
   const overlay = document.getElementById('onboarding-overlay');
-  const dismissBtn = document.getElementById('onboarding-dismiss');
+  const dismissBtn = document.getElementById('onboarding-dismiss') as HTMLButtonElement | null;
 
   // Only show if first time
   if (localStorage.getItem(STORAGE_KEY)) {
     overlay?.remove();
+  } else {
+    // Focus the dismiss button when overlay is shown
+    dismissBtn?.focus();
   }
+
+  // Focus trap: keep focus inside the card while overlay is visible
+  overlay?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab' || !overlay.isConnected) return;
+    // The only interactive element in the card is the dismiss button
+    // so just redirect any Tab/Shift+Tab back to it
+    e.preventDefault();
+    dismissBtn?.focus();
+  });
 
   dismissBtn?.addEventListener('click', () => {
     localStorage.setItem(STORAGE_KEY, '1');

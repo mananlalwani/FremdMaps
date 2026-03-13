@@ -56,7 +56,15 @@ import OnboardingOverlay from "../components/OnboardingOverlay.astro";
 				--error: #f87171;
 				--error-muted: rgba(248, 113, 113, 0.15);
 				
-				/* Elevation */
+				/* Stairway */
+			--stair-color: #9C27B0;
+			--stair-color-dark: #7B1FA2;
+
+			/* Map */
+			--map-bg: #1a1a24;
+			--nav-panel-width: 380px;
+
+			/* Elevation */
 				--shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
 				--shadow-md: 0 4px 12px rgba(0,0,0,0.4);
 				--shadow-lg: 0 12px 32px rgba(0,0,0,0.5);
@@ -202,14 +210,14 @@ import OnboardingOverlay from "../components/OnboardingOverlay.astro";
 		
 		<script>
 			const urlParams = new URLSearchParams(window.location.search);
-			const currentMode = urlParams.get('mode') || 'user';
-			
+			const isAdmin = urlParams.has('admin');
+
 			const debugUI = document.getElementById('debug-ui');
 			const navPanel = document.getElementById('nav-panel');
 			const modeToggle = document.getElementById('mode-toggle');
-			
+
 			function updateModeUI() {
-				if (currentMode === 'admin') {
+				if (isAdmin) {
 					if (debugUI) debugUI.style.display = 'flex';
 					if (navPanel) navPanel.style.display = 'none';
 					if (modeToggle) modeToggle.textContent = 'User Mode';
@@ -219,13 +227,22 @@ import OnboardingOverlay from "../components/OnboardingOverlay.astro";
 					if (modeToggle) modeToggle.textContent = 'Admin Mode';
 				}
 			}
-			
+
 			updateModeUI();
-			
+
 			if (modeToggle) {
 				modeToggle.addEventListener('click', () => {
-					const newMode = currentMode === 'admin' ? 'user' : 'admin';
-					window.location.search = `?mode=${newMode}`;
+					if (isAdmin) {
+						// Strip ?admin, keep other params
+						urlParams.delete('admin');
+						const qs = urlParams.toString();
+						window.location.search = qs || '';
+					} else {
+						// Add ?admin as a valueless flag (URLSearchParams always adds '=',
+						// so build the query string manually)
+						const otherParams = urlParams.toString();
+						window.location.search = otherParams ? `${otherParams}&admin` : 'admin';
+					}
 				});
 			}
 		</script>
@@ -236,7 +253,7 @@ import OnboardingOverlay from "../components/OnboardingOverlay.astro";
 				top: 16px;
 				right: 16px;
 				z-index: 1001;
-				padding: 8px 14px;
+				padding: 12px 16px;
 				background: var(--panel-bg);
 				color: var(--text-secondary);
 				border: 1px solid var(--panel-border);

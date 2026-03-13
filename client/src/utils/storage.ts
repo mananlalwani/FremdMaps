@@ -1,36 +1,70 @@
 /**
- * localStorage wrapper for search history and favorites
- * Handles serialization, quota management, and error handling
+ * localStorage wrapper for search history, favorites, analytics, and schedule.
+ *
+ * All public functions degrade gracefully when localStorage is unavailable
+ * (e.g. private browsing mode) — reads return default values, writes silently
+ * no-op.
+ *
+ * Storage key namespacing:
+ * - `RECENT_SEARCHES` — ordered ring buffer of route searches; read by
+ *   `getFrequentRooms` → `rankWithRecency` to boost recently-visited rooms.
+ * - `FAVORITES`       — flat array of favorited node UIDs.
+ * - `SEARCH_ANALYTICS` — write-only telemetry (query + result count); not
+ *   surfaced in the UI but useful for future ranking improvements.  Cleared
+ *   automatically when a `QuotaExceededError` occurs.
+ * - `SCHEDULE`        — user's class schedule (period → room assignments).
  */
 
-import type { SearchHistoryEntry } from './types'
+import type { SearchHistoryEntry, ScheduleEntry } from './types'
+import { logger } from './logger'
 
 const STORAGE_KEYS = {
   RECENT_SEARCHES: 'nav_recent_searches',
   FAVORITES: 'nav_favorites',
-  SEARCH_ANALYTICS: 'nav_search_analytics'
+  SEARCH_ANALYTICS: 'nav_search_analytics',
+  SCHEDULE: 'nav_schedule'
 } as const
 
+/**
+ * Maximum number of recent route searches to retain.
+ * 10 covers a full school day of navigation without excessive localStorage use.
+ */
 const MAX_RECENT_SEARCHES = 10
+
+/**
+ * Maximum number of analytics entries to retain.
+ * 100 entries is sufficient for trend analysis while keeping the payload small.
+ * When the limit is reached, the oldest entries are trimmed (FIFO).
+ */
 const MAX_ANALYTICS_ENTRIES = 100
 
 /**
- * Check if localStorage is available
- * May be blocked in private browsing mode
+ * Cached localStorage availability check — tested once at module load time.
+ * May be blocked in private browsing mode.
  */
-function isStorageAvailable(): boolean {
+const _storageAvailable: boolean = (() => {
   try {
-    const test = '__storage_test__'
-    localStorage.setItem(test, test)
-    localStorage.removeItem(test)
+    localStorage.setItem('__t', '1')
+    localStorage.removeItem('__t')
     return true
-  } catch (e) {
+  } catch {
     return false
   }
+})()
+
+function isStorageAvailable(): boolean {
+  return _storageAvailable
 }
 
 /**
- * Safely get item from localStorage
+ * Safely deserialise a value from localStorage.
+ *
+ * Returns `defaultValue` when storage is unavailable, the key is missing, or
+ * JSON parsing fails (logging a warning in the latter case).
+ *
+ * @param key          localStorage key to read.
+ * @param defaultValue Fallback returned on any failure or missing key.
+ * @returns The parsed value, or `defaultValue`.
  */
 function getItem<T>(key: string, defaultValue: T): T {
   if (!isStorageAvailable()) return defaultValue
@@ -40,15 +74,23 @@ function getItem<T>(key: string, defaultValue: T): T {
     if (!item) return defaultValue
     return JSON.parse(item) as T
   } catch (e) {
-    console.warn(`Failed to read from localStorage: ${key}`, e)
+    logger.warn(`Failed to read from localStorage: ${key}`, e)
     return defaultValue
   }
 }
 
 /**
- * Safely set item in localStorage
+ * Safely serialise and write a value to localStorage.
+ *
+ * On `QuotaExceededError`, automatically clears the analytics key to free
+ * space and retries once.  Returns `false` when storage is unavailable or
+ * every write attempt fails.
+ *
+ * @param key   localStorage key to write.
+ * @param value Value to serialise as JSON.
+ * @returns `true` on success, `false` on failure.
  */
-function setItem(key: string, value: any): boolean {
+function setItem(key: string, value: unknown): boolean {
   if (!isStorageAvailable()) return false
 
   try {
@@ -57,7 +99,7 @@ function setItem(key: string, value: any): boolean {
   } catch (e) {
     // Handle quota exceeded error
     if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-      console.error('localStorage quota exceeded')
+      logger.error('localStorage quota exceeded')
       // Try to free space by clearing analytics
       localStorage.removeItem(STORAGE_KEYS.SEARCH_ANALYTICS)
       
@@ -66,10 +108,10 @@ function setItem(key: string, value: any): boolean {
         localStorage.setItem(key, JSON.stringify(value))
         return true
       } catch (retryError) {
-        console.error('Failed to save after clearing analytics', retryError)
+        logger.error('Failed to save after clearing analytics', retryError)
       }
     } else {
-      console.warn(`Failed to write to localStorage: ${key}`, e)
+      logger.warn(`Failed to write to localStorage: ${key}`, e)
     }
     return false
   }
@@ -221,29 +263,13 @@ export function trackSearch(query: string, resultCount: number): void {
 }
 
 /**
- * Get popular search queries
- * Returns queries sorted by frequency
- */
-export function getPopularSearches(limit: number = 5): string[] {
-  const analytics = getItem<SearchAnalyticsEntry[]>(STORAGE_KEYS.SEARCH_ANALYTICS, [])
-  
-  // Count frequency
-  const frequency = new Map<string, number>()
-  
-  for (const entry of analytics) {
-    const count = frequency.get(entry.query) ?? 0
-    frequency.set(entry.query, count + 1)
-  }
-
-  // Sort by frequency and return top queries
-  return Array.from(frequency.entries())
-    .sort((a, b) => b[1] - a[1])  // Descending by count
-    .slice(0, limit)
-    .map(([query]) => query)
-}
-
-/**
- * Get frequently accessed rooms (for recency boost)
+ * Flatten recent search history into a per-room recency list.
+ *
+ * Each `SearchHistoryEntry` contributes two entries (one for `from`, one for
+ * `to`) so that any room that appeared in a recent route gets a recency boost
+ * when it is used by `rankWithRecency` in `search.ts`.
+ *
+ * @returns Flat list of `{ room, timestamp }` objects, sorted newest-first.
  */
 export function getFrequentRooms(): { room: string, timestamp: number }[] {
   const recent = getRecentSearches()
@@ -260,23 +286,49 @@ export function getFrequentRooms(): { room: string, timestamp: number }[] {
   return allRooms.sort((a, b) => b.timestamp - a.timestamp)
 }
 
+// ========== Schedule ==========
+
 /**
- * Clear all storage (for debugging/reset)
+ * Hardcoded default period labels used when no schedule has been saved yet.
+ * Eight periods covers the most common US high-school block-schedule formats.
  */
-export function clearAllStorage(): void {
-  clearRecentSearches()
-  clearFavorites()
-  setItem(STORAGE_KEYS.SEARCH_ANALYTICS, [])
-  console.log('All navigation storage cleared')
+const DEFAULT_PERIODS = ['1', '2', '3', '4', '5', '6', '7', '8']
+
+/**
+ * Get the full class schedule (ordered list of period->room entries)
+ */
+export function getSchedule(): ScheduleEntry[] {
+  const stored = getItem<ScheduleEntry[]>(STORAGE_KEYS.SCHEDULE, [])
+  if (stored.length > 0) return stored
+  // Return default empty periods on first use
+  return DEFAULT_PERIODS.map(p => ({ period: p, room: '' }))
 }
 
 /**
- * Export storage data (for debugging)
+ * Save the full schedule, replacing any existing entries
  */
-export function exportStorageData(): string {
-  return JSON.stringify({
-    recentSearches: getRecentSearches(),
-    favorites: getFavorites(),
-    analytics: getItem(STORAGE_KEYS.SEARCH_ANALYTICS, [])
-  }, null, 2)
+export function saveSchedule(entries: ScheduleEntry[]): void {
+  setItem(STORAGE_KEYS.SCHEDULE, entries)
+}
+
+/**
+ * Update a single period's room assignment
+ */
+export function updateSchedulePeriod(period: string, room: string): void {
+  const schedule = getSchedule()
+  const idx = schedule.findIndex(e => e.period === period)
+  if (idx !== -1) {
+    schedule[idx].room = room
+  } else {
+    schedule.push({ period, room })
+  }
+  setItem(STORAGE_KEYS.SCHEDULE, schedule)
+}
+
+/**
+ * Clear all room assignments (keep period slots, reset rooms to empty)
+ */
+export function clearSchedule(): void {
+  const schedule = getSchedule().map(e => ({ ...e, room: '' }))
+  setItem(STORAGE_KEYS.SCHEDULE, schedule)
 }

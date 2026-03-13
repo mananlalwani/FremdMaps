@@ -3,7 +3,7 @@
  * Handles distance calculations and line intersection (ray casting)
  */
 
-import type { Point, Wall } from './types'
+import type { Point, Wall, Node } from './types'
 import { GEOMETRY } from './constants'
 
 /**
@@ -71,14 +71,21 @@ export function hasLineOfSight(p1: Point, p2: Point, walls: Wall[]): boolean {
 }
 
 /**
- * Convert raw wall data from API to Wall objects
- * API format: [[[lat1, lng1], [lat2, lng2]], ...]
+ * Convert raw wall data from API to Wall objects.
+ * API format: array of polylines, each polyline is an array of [lat, lng] pairs.
+ * A polyline with N points yields N-1 Wall segments (consecutive pairs).
  */
 export function convertWallData(wallData: number[][][]): Wall[] {
-  return wallData.map(wall => ({
-    start: { lat: wall[0][0], lng: wall[0][1] },
-    end: { lat: wall[1][0], lng: wall[1][1] }
-  }))
+  const walls: Wall[] = []
+  for (const polyline of wallData) {
+    for (let i = 0; i < polyline.length - 1; i++) {
+      walls.push({
+        start: { lat: polyline[i][0], lng: polyline[i][1] },
+        end:   { lat: polyline[i + 1][0], lng: polyline[i + 1][1] },
+      })
+    }
+  }
+  return walls
 }
 
 /**
@@ -212,18 +219,16 @@ function calculateAngleBetween(p1: Point, p2: Point, p3: Point): number {
  * @returns Simplified path with only significant nodes
  */
 export function simplifyPath(
-  path: any[], 
+  path: Node[], 
   angleThreshold: number = 30, 
   rdpEpsilon: number = 50
-): any[] {
+): Node[] {
   // Need at least 3 points to simplify
   if (path.length <= 2) {
     return path
   }
   
-  console.log(`Simplifying path: ${path.length} nodes → `, { angleThreshold, rdpEpsilon })
-  
-  const simplified: any[] = []
+  const simplified: Node[] = []
   simplified.push(path[0]) // Always keep start
   
   // Pass 1: Filter by angle and room type
@@ -236,53 +241,44 @@ export function simplifyPath(
     
     if (isRoom) {
       simplified.push(node)
-      console.log(`  Keeping room node: ${node.rooms?.join(', ')}`)
       continue
     }
     
-    // For waypoints, check if angle change is significant
+    // For waypoints, keep only those with a significant turn
     const angle = calculateAngleBetween(
       { lat: path[i-1].lat, lng: path[i-1].lng },
       { lat: node.lat, lng: node.lng },
       { lat: path[i+1].lat, lng: path[i+1].lng }
     )
     
-    // Keep waypoints with significant turns
     if (angle >= angleThreshold) {
       simplified.push(node)
-      console.log(`  Keeping waypoint with ${Math.round(angle)}° turn`)
-    } else {
-      console.log(`  Removing waypoint with ${Math.round(angle)}° turn (< ${angleThreshold}°)`)
     }
   }
   
   simplified.push(path[path.length - 1]) // Always keep end
   
-  console.log(`After angle filtering: ${simplified.length} nodes`)
-  
   // Pass 2: Apply RDP if still too many points
   if (simplified.length > 10) {
-    console.log(`Applying RDP (epsilon=${rdpEpsilon}) to further simplify...`)
-    
+    // Build a coordinate-keyed lookup before running RDP — O(N) instead of O(N²)
+    const coordKey = (lat: number, lng: number): string =>
+      `${lat.toFixed(6)},${lng.toFixed(6)}`
+    const nodeByCoord = new Map<string, Node>()
+    for (const n of simplified) {
+      nodeByCoord.set(coordKey(n.lat, n.lng), n)
+    }
+
     // Convert to Points for RDP
     const points: Point[] = simplified.map(n => ({ lat: n.lat, lng: n.lng }))
     const rdpPoints = rdpSimplify(points, rdpEpsilon)
     
-    console.log(`After RDP: ${rdpPoints.length} points`)
-    
-    // Map RDP points back to original nodes
-    // Keep nodes whose coordinates match RDP output
-    const rdpSimplified = rdpPoints.map(pt => {
-      const node = simplified.find(n => 
-        Math.abs(n.lat - pt.lat) < 0.001 && 
-        Math.abs(n.lng - pt.lng) < 0.001
-      )
-      return node!
-    }).filter(n => n !== undefined)
+    // Map RDP points back to original nodes via the pre-built lookup
+    const rdpSimplified = rdpPoints
+      .map(pt => nodeByCoord.get(coordKey(pt.lat, pt.lng)))
+      .filter((n): n is Node => n !== undefined)
     
     return rdpSimplified
   }
   
-  console.log(`Final simplified path: ${simplified.length} nodes`)
   return simplified
 }

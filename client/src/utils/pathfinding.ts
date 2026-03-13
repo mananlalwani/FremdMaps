@@ -1,10 +1,51 @@
 /**
- * A* Pathfinding Algorithm
- * Finds the shortest path between two nodes in a graph
+ * A* pathfinding over the visibility graph.
+ *
+ * Exports:
+ * - `findPath`           — A* shortest path between two node UIDs
+ * - `findNearestBathroom` — single Dijkstra sweep to find the nearest bathroom
+ * - `findNodeByRoom`     — exact-match node lookup by room name
+ * - `searchNodesByRoom`  — partial-match node lookup by room name
+ * - `invalidatePathCache` — clear the LRU result cache after graph changes
+ *
+ * Note: `findNodeByRoom` and `searchNodesByRoom` duplicate functionality in
+ * `search.ts` (`findExactMatch`, `searchNodes`).  The versions here are simpler
+ * substring/equality checks without Fuse.js; they are kept for use by the
+ * server-side copy of this module where Fuse.js is not available.
  */
 
 import type { Node, Graph, PathResult } from './types'
 import { distance } from './geometry'
+import { routeLogger } from './logger'
+
+// ---------------------------------------------------------------------------
+// LRU Path Cache
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum number of path results to keep in the LRU cache.
+ * 20 entries covers typical session usage (repeated same-pair queries,
+ * multi-floor re-renders) without unbounded memory growth.
+ */
+const PATH_CACHE_MAX = 20
+
+/**
+ * Module-level LRU cache for computed paths.
+ * Key: "<startUid>::<goalUid>"
+ * Eviction policy: when size > PATH_CACHE_MAX, the oldest entry is removed.
+ * JavaScript Maps preserve insertion order, so `map.keys().next()` always
+ * yields the least-recently-inserted key.
+ */
+const pathCache = new Map<string, PathResult>()
+
+/**
+ * Invalidate the entire path cache.
+ * Call this whenever the node/wall data changes (e.g. admin mode edits)
+ * so stale cached paths are not returned.
+ */
+export function invalidatePathCache(): void {
+  pathCache.clear()
+}
 
 /**
  * Priority Queue implementation using binary min-heap for A*
@@ -13,27 +54,39 @@ import { distance } from './geometry'
  */
 class PriorityQueue<T> {
   private heap: Array<{ item: T; priority: number }> = []
-  
+
+  /**
+   * Insert `item` with the given `priority`.
+   * Lower priority values are dequeued first (min-heap).
+   * Time complexity: O(log N).
+   */
   enqueue(item: T, priority: number): void {
     this.heap.push({ item, priority })
     this.bubbleUp(this.heap.length - 1)
   }
-  
+
+  /**
+   * Remove and return the item with the lowest priority value.
+   * Returns `undefined` when the queue is empty.
+   * Time complexity: O(log N).
+   */
   dequeue(): T | undefined {
     if (this.heap.length === 0) return undefined
     if (this.heap.length === 1) return this.heap.pop()!.item
-    
+
     const min = this.heap[0]
     this.heap[0] = this.heap.pop()!
     this.bubbleDown(0)
-    
+
     return min.item
   }
-  
+
+  /** `true` when the queue contains no items. */
   isEmpty(): boolean {
     return this.heap.length === 0
   }
-  
+
+  /** Number of items currently in the queue. */
   size(): number {
     return this.heap.length
   }
@@ -92,6 +145,11 @@ export function findPath(
   nodes: Node[],
   graph: Graph
 ): PathResult {
+  // Check cache first
+  const cacheKey = `${startUid}::${goalUid}`
+  const cached = pathCache.get(cacheKey)
+  if (cached) return cached
+
   // Create map for quick node lookup
   const nodeMap = new Map(nodes.map(n => [n.uid, n]))
   const startNode = nodeMap.get(startUid)
@@ -99,7 +157,7 @@ export function findPath(
   
   // Validate inputs
   if (!startNode || !goalNode) {
-    console.error('Start or goal node not found')
+    routeLogger.error('Start or goal node not found')
     return { path: [], distance: 0, found: false }
   }
   
@@ -152,13 +210,22 @@ export function findPath(
       
       const totalDistance = gScore.get(goalUid)!
       
-      console.log(`Path found: ${path.length} nodes, distance: ${Math.round(totalDistance)}`)
+      routeLogger.log(`Path found: ${path.length} nodes, distance: ${Math.round(totalDistance)}`)
       
-      return {
+      const result: PathResult = {
         path,
         distance: totalDistance,
         found: true
       }
+
+      // Store in LRU cache, evicting oldest entry when full
+      if (pathCache.size >= PATH_CACHE_MAX) {
+        const oldestKey = pathCache.keys().next().value
+        if (oldestKey !== undefined) pathCache.delete(oldestKey)
+      }
+      pathCache.set(cacheKey, result)
+
+      return result
     }
     
     // Skip if already visited
@@ -192,13 +259,20 @@ export function findPath(
   }
   
   // No path found
-  console.warn(`No path found from ${startUid} to ${goalUid}`)
+  routeLogger.warn(`No path found from ${startUid} to ${goalUid}`)
   return { path: [], distance: 0, found: false }
 }
 
 /**
- * Find the nearest node to a given room number
- * Useful for searching by room name
+ * Find the first node whose `rooms` array contains an exact case-insensitive
+ * match for `roomNumber`.
+ *
+ * Simpler than `findExactMatch` in `search.ts` (no Fuse.js); suitable for
+ * server-side use and deterministic lookups where the full room name is known.
+ *
+ * @param roomNumber  Room name to match (case-insensitive).
+ * @param nodes       Node pool.
+ * @returns The first matching node, or `undefined` if none.
  */
 export function findNodeByRoom(roomNumber: string, nodes: Node[]): Node | undefined {
   return nodes.find(node => 
@@ -209,8 +283,16 @@ export function findNodeByRoom(roomNumber: string, nodes: Node[]): Node | undefi
 }
 
 /**
- * Find all nodes that match a room search query
- * Supports partial matching
+ * Return all nodes whose `rooms` array contains `query` as a case-insensitive
+ * substring.
+ *
+ * Simpler than `searchNodes` in `search.ts` (no Fuse.js); intended for
+ * server-side use and situations where partial-match without fuzzy tolerance
+ * is sufficient.
+ *
+ * @param query  Substring to search for (case-insensitive, trimmed).
+ * @param nodes  Node pool.
+ * @returns All nodes with at least one room name that includes `query`.
  */
 export function searchNodesByRoom(query: string, nodes: Node[]): Node[] {
   const lowerQuery = query.toLowerCase().trim()
@@ -223,9 +305,13 @@ export function searchNodesByRoom(query: string, nodes: Node[]): Node[] {
 }
 
 /**
- * Find the nearest bathroom to a given node
- * Uses actual pathfinding distance (not straight-line) to account for walls and floor changes
- * 
+ * Find the nearest bathroom to a given node.
+ * Uses a single Dijkstra pass from the start node to find all reachable
+ * distances in one sweep — O((V + E) log V) instead of O(B * (V + E) log V)
+ * for B bathrooms.
+ *
+ * Falls back to straight-line distance when no graph is provided.
+ *
  * @param startNode Starting point
  * @param allNodes Array of all nodes
  * @param graph Navigation graph for pathfinding
@@ -240,50 +326,77 @@ export function findNearestBathroom(
   const bathrooms = allNodes.filter(n => n.type === "bathroom")
   
   if (bathrooms.length === 0) {
-    console.warn('No bathrooms found')
+    routeLogger.warn('No bathrooms found')
     return undefined
   }
   
   // If no graph provided, use straight-line distance as fallback
   if (!graph) {
-    console.log('No graph provided, using straight-line distance')
+    routeLogger.log('No graph provided, using straight-line distance')
     let nearest: Node | undefined
     let minDistance = Infinity
-    
+
     for (const bathroom of bathrooms) {
       const dist = distance(
         { lat: startNode.lat, lng: startNode.lng },
         { lat: bathroom.lat, lng: bathroom.lng }
       )
-      
+
       if (dist < minDistance) {
         minDistance = dist
         nearest = bathroom
       }
     }
-    
-    console.log(`Found nearest bathroom: ${nearest?.rooms[0]} at ${Math.round(minDistance)} units away (straight-line)`)
+
+    routeLogger.log(`Found nearest bathroom: ${nearest?.rooms[0]} at ${Math.round(minDistance)} units away (straight-line)`)
     return nearest
   }
-  
-  // Use actual pathfinding distance to find truly nearest bathroom
+
+  // Single Dijkstra pass from startNode — visits each node at most once.
+  // Time complexity: O((V + E) log V)
+  const nodeMap = new Map(allNodes.map(n => [n.uid, n]))
+  const dist = new Map<string, number>()
+  const open = new PriorityQueue<string>()
+
+  dist.set(startNode.uid, 0)
+  open.enqueue(startNode.uid, 0)
+
+  const visited = new Set<string>()
+
+  while (!open.isEmpty()) {
+    const current = open.dequeue()!
+    if (visited.has(current)) continue
+    visited.add(current)
+
+    const currentDist = dist.get(current) ?? Infinity
+    const neighbors = graph.get(current) ?? []
+    for (const edge of neighbors) {
+      if (visited.has(edge.to)) continue
+      const newDist = currentDist + edge.cost
+      if (newDist < (dist.get(edge.to) ?? Infinity)) {
+        dist.set(edge.to, newDist)
+        open.enqueue(edge.to, newDist)
+      }
+    }
+  }
+
+  // Pick the reachable bathroom with minimum path distance
   let nearest: Node | undefined
   let minDistance = Infinity
-  
+
   for (const bathroom of bathrooms) {
-    const result = findPath(startNode.uid, bathroom.uid, allNodes, graph)
-    
-    if (result.found && result.distance < minDistance) {
-      minDistance = result.distance
+    const d = dist.get(bathroom.uid)
+    if (d !== undefined && d < minDistance) {
+      minDistance = d
       nearest = bathroom
     }
   }
-  
+
   if (nearest) {
-    console.log(`Found nearest bathroom: ${nearest.rooms[0]} at ${Math.round(minDistance)} units away (actual path${nearest.floor !== startNode.floor ? ', cross-floor' : ''})`)
+    routeLogger.log(`Found nearest bathroom: ${nearest.rooms[0]} at ${Math.round(minDistance)} units away (actual path${nearest.floor !== startNode.floor ? ', cross-floor' : ''})`)
   } else {
-    console.warn('No reachable bathrooms found')
+    routeLogger.warn('No reachable bathrooms found')
   }
-  
+
   return nearest
 }
