@@ -16,10 +16,9 @@
 import L from 'leaflet'
 import { convertWallData } from '../utils/geometry'
 import type { Node, Wall, TrafficZone } from '../utils/types'
-import { MAP_CONFIG, API_CONFIG, FLOORS } from '../utils/constants'
+import { MAP_CONFIG, FLOORS } from '../utils/constants'
 import { graphLogger, logger } from '../utils/logger'
 import { state } from './map-state'
-import { drawTrafficZoneRect } from './admin-editor'
 
 // Callbacks injected from the orchestrator (Map.astro)
 /**
@@ -39,8 +38,6 @@ export interface MapInitCallbacks {
   toggleGraphVisualization: () => void
   /** Rebuild the visibility graph and A* cache after data changes. */
   initializeNavigation: () => Promise<void>
-  /** Refresh UI elements that reflect current node/wall counts. */
-  updateUI: () => void
   /** Create a styled `<p>` element (used for error messages in the empty-state panel). */
   createTextParagraph: (text: string, style?: string) => HTMLParagraphElement
 }
@@ -215,14 +212,14 @@ export function renderMapData(): void {
 }
 
 /**
- * Fetch nodes, walls, and traffic zones for the current floor, then trigger
- * navigation initialisation.
+ * Fetch nodes, walls, and traffic zones for the current floor from static
+ * JSON files in `/public/data/`, then trigger navigation initialisation.
  *
  * Sequence:
  * 1. `clearMapData` — remove current markers and polylines from the Leaflet map.
- * 2. Fetch `/api/nodes` and `/api/walls` for `state.currentFloor`.
- * 3. Fetch `/api/zones`; coerce any legacy `severity` string fields to numeric
- *    `intensity` values; draw zone rects when in debug mode.
+ * 2. Fetch `/data/floor<N>/nodes.json` and `/data/floor<N>/walls.json`.
+ * 3. Fetch `/data/floor<N>/zones.json`; coerce any legacy `severity` string
+ *    fields to numeric `intensity` values.
  * 4. `renderMapData` — add markers and wall polylines for the new floor.
  * 5. `loadAllNodesAllFloors` + `loadAllFloorsWalls` — refresh the cross-floor
  *    node/wall pools used by the visibility-graph builder.
@@ -233,19 +230,15 @@ export function renderMapData(): void {
  */
 export async function loadData(): Promise<void> {
   try {
-    // `import.meta.env` is typed as `ImportMeta` in Astro but plain `.ts` files
-    // don't have the Astro type shim — cast to a generic Record to silence TS.
-    const apiUrl = (import.meta as { env: Record<string, string> }).env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL
-
     clearMapData()
 
-    const nodesRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.NODES}?floor=${state.currentFloor}`)
+    const nodesRes = await fetch(`/data/floor${state.currentFloor}/nodes.json`)
     if (!nodesRes.ok) {
       throw new Error(`Failed to load nodes: ${nodesRes.status} ${nodesRes.statusText}`)
     }
     state.collectedNodes = await nodesRes.json()
 
-    const wallsRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.WALLS}?floor=${state.currentFloor}`)
+    const wallsRes = await fetch(`/data/floor${state.currentFloor}/walls.json`)
     if (!wallsRes.ok) {
       throw new Error(`Failed to load walls: ${wallsRes.status} ${wallsRes.statusText}`)
     }
@@ -258,7 +251,7 @@ export async function loadData(): Promise<void> {
     state.trafficZoneRects = []
     state.trafficZones = []
 
-    const zonesRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.ZONES}?floor=${state.currentFloor}`)
+    const zonesRes = await fetch(`/data/floor${state.currentFloor}/zones.json`)
     if (zonesRes.ok) {
       const raw: unknown[] = await zonesRes.json()
       const zones: TrafficZone[] = raw.map((z: unknown) => {
@@ -275,18 +268,12 @@ export async function loadData(): Promise<void> {
         return zone as unknown as TrafficZone
       })
       state.trafficZones = zones
-      if (state.isDebugMode) {
-        for (const zone of zones) {
-          drawTrafficZoneRect(zone)
-        }
-      }
       graphLogger.log(`Loaded ${zones.length} traffic zones for floor ${state.currentFloor}`)
     } else {
       logger.warn(`Failed to load zones for floor ${state.currentFloor}: ${zonesRes.status}`)
     }
 
     renderMapData()
-    _cb.updateUI()
 
     await loadAllNodesAllFloors()
     const allWalls = await loadAllFloorsWalls()
@@ -299,7 +286,7 @@ export async function loadData(): Promise<void> {
       emptyState.textContent = ''
       emptyState.appendChild(
         _cb.createTextParagraph(
-          'Unable to load navigation data. Please check if the server is running.',
+          'Unable to load navigation data.',
           'color: #ff6b6b;'
         )
       )
@@ -308,16 +295,14 @@ export async function loadData(): Promise<void> {
 }
 
 /**
- * Fetch nodes for every available floor and populate `state.allNodesAllFloors`.
+ * Fetch nodes for every available floor from static JSON files and populate
+ * `state.allNodesAllFloors`.
  */
 export async function loadAllNodesAllFloors(): Promise<Node[]> {
   try {
-    // Same import.meta cast as loadData — required in plain .ts files.
-    const apiUrl = (import.meta as { env: Record<string, string> }).env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL
-
     const perFloor = await Promise.all(
       FLOORS.AVAILABLE.map(async floor => {
-        const res = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.NODES}?floor=${floor.id}`)
+        const res = await fetch(`/data/floor${floor.id}/nodes.json`)
         if (!res.ok) return []
         const floorNodes: Node[] = await res.json()
         for (const node of floorNodes) { node.floor = floor.id }
@@ -337,17 +322,14 @@ export async function loadAllNodesAllFloors(): Promise<Node[]> {
 }
 
 /**
- * Fetch walls for every available floor, convert them, and return the full
- * array (tagged with `floor` property).
+ * Fetch walls for every available floor from static JSON files, convert them,
+ * and return the full array (tagged with `floor` property).
  */
 export async function loadAllFloorsWalls(): Promise<Wall[]> {
   try {
-    // Same import.meta cast as loadData — required in plain .ts files.
-    const apiUrl = (import.meta as { env: Record<string, string> }).env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL
-
     const perFloor = await Promise.all(
       FLOORS.AVAILABLE.map(async floor => {
-        const res = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.WALLS}?floor=${floor.id}`)
+        const res = await fetch(`/data/floor${floor.id}/walls.json`)
         if (!res.ok) return []
         const floorWallsRaw: number[][][] = await res.json()
         const floorWalls = convertWallData(floorWallsRaw)

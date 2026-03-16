@@ -24,39 +24,14 @@
 </button>
 
 
-<!-- Debug UI - Only visible with ?admin=true URL parameter -->
-<div id="debug-ui" style="display: none;">
-    <button id="toggle-debug">Enable Debug Mode</button>
-    <div
-        id="debug-controls"
-        style="display: none; flex-direction: column; gap: 5px;"
-    >
-        <button id="mode-room" class="active-mode">Add Room Node</button>
-        <button id="mode-waypoint">Add Waypoint</button>
-        <button id="mode-bathroom">Add Bathroom</button>
-        <button id="mode-stairway">Add Stairway</button>
-        <button id="mode-connect-stairway">Connect Stairways</button>
-        <button id="mode-special">Add Special Place</button>
-        <button id="mode-wall">Add Walls</button>
-        <button id="mode-traffic-zone">Add Traffic Zone</button>
-        <button id="toggle-graph">Show Graph</button>
-        <button id="save-data">Save Data</button>
-        <div
-            id="stats-display"
-            style="background: var(--panel-surface); padding: 10px 12px; border-radius: var(--radius-md); font-size: 11px; color: var(--text-secondary); border: 1px solid var(--panel-border); font-family: var(--font-mono);"
-        >
-            Nodes: <span id="node-count">0</span><br />
-            Walls: <span id="wall-count">0</span>
-        </div>
-    </div>
-</div>
-
 <script>
     import "leaflet/dist/leaflet.css";
-    import { findNodeByRoom } from "../utils/pathfinding";
-    import type { Node, SearchResult, ScheduleEntry } from "../utils/types";
-    import { MAP_CONFIG, API_CONFIG, UI_CONFIG } from "../utils/constants";
+    import L from "leaflet";
+    import { findNodeByRoom, findPath, findNearestBathroom } from "../utils/pathfinding";
+    import type { Node, SearchResult, ScheduleEntry, Graph } from "../utils/types";
+    import { MAP_CONFIG, UI_CONFIG } from "../utils/constants";
     import { logger, graphLogger, searchLogger, routeLogger } from "../utils/logger";
+    import { buildVisibilityGraph } from "../utils/graph";
 
     // Search utilities
     import {
@@ -91,16 +66,11 @@
         redrawRouteForCurrentFloor,
         clearRoute
     } from "../map/route-display";
-    import {
-        setAdminEditorCallbacks,
-        onMapClick,
-        onMapDoubleClick,
-        addMarker,
-        addWallPolyline,
-        toggleGraphVisualization,
-        setupDebugToggle,
-        setMode
-    } from "../map/admin-editor";
+
+    // ========== GRAPH STATE ==========
+
+    /** Visibility graph built by initializeNavigation; used by handleFindRoute and handleFindNearestBathroom. */
+    let _graph: Graph | null = null
 
     // ========== SAFE DOM HELPERS (XSS Prevention) ==========
 
@@ -284,12 +254,9 @@
 
     /**
      * Called by map-init after floor data finishes loading.
-     * Invalidates the search cache (nodes may have changed), initialises the
-     * search/recent/favourites UI, clears the empty-state placeholder, and
-     * enables the navigation action buttons.
-     *
-     * Route computation is fully server-side — this function does NOT build
-     * a local graph; it just signals that the UI is ready to accept input.
+     * Builds the client-side visibility graph, invalidates the search cache,
+     * initialises the search/recent/favourites UI, clears the empty-state
+     * placeholder, and enables the navigation action buttons.
      */
     async function initializeNavigation(): Promise<void> {
         if (state.allNodesAllFloors.length < 2) {
@@ -297,7 +264,14 @@
             return;
         }
 
-        graphLogger.log('Navigation ready (pathfinding handled server-side)');
+        graphLogger.log('Building visibility graph client-side...');
+        _graph = buildVisibilityGraph(
+            state.allNodesAllFloors,
+            state.wallObjects,
+            MAP_CONFIG.MAX_HALLWAY_DISTANCE,
+            state.trafficZones
+        );
+        graphLogger.log('Visibility graph built.');
 
         invalidateSearchCache();
         initializeSearchEnhancements();
@@ -359,21 +333,6 @@
         } else {
             alert(message);
         }
-    }
-
-    /**
-     * Refresh the admin-mode debug stats panel (`#node-count`, `#wall-count`)
-     * with the current counts from the shared `state` object.
-     *
-     * Called by map-init and admin-editor after any data mutation so the
-     * counters stay in sync without a full page reload.
-     */
-    function updateUI(): void {
-        const nodeCountSpan = document.getElementById('node-count');
-        const wallCountSpan = document.getElementById('wall-count');
-
-        if (nodeCountSpan) nodeCountSpan.textContent = String(state.collectedNodes.length);
-        if (wallCountSpan) wallCountSpan.textContent = String(state.collectedWalls.length);
     }
 
     // ========== SEARCH ENHANCEMENTS ==========
@@ -946,14 +905,14 @@
      *
      * For each consecutive pair of filled schedule entries (P1→P2, P2→P3, …):
      * - Looks up the `Node` for each room name.
-     * - POSTs to `GET /api/route?from=<uid>&to=<uid>` to get the route.
+     * - Computes the route client-side using `findPath` over the visibility graph.
      * - Renders a card showing the period label, room names, and route metadata
      *   (floor info for single-floor routes, "Multi-floor route" otherwise).
      * - Clicking a card closes the modal and renders the route on the map via
      *   `displayRoute`.
      *
      * Shows guidance messages when fewer than 2 rooms are configured.
-     * Handles network errors and missing nodes gracefully with inline error text.
+     * Handles missing nodes and graph-not-ready cases gracefully.
      */
     async function renderAllPaths(): Promise<void> {
         const list = document.getElementById('schedule-paths-list');
@@ -979,8 +938,6 @@
             list.appendChild(msg);
             return;
         }
-
-        const apiUrl = (import.meta as { env: Record<string, string> }).env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL;
 
         // Build consecutive pairs: P1→P2, P2→P3, …
         for (let i = 0; i < filled.length - 1; i++) {
@@ -1020,38 +977,32 @@
                 continue;
             }
 
-            // Fetch route and add meta / click handler
-            try {
-                const res = await fetch(`${apiUrl}/api/route?from=${encodeURIComponent(fromNode.uid)}&to=${encodeURIComponent(toNode.uid)}`);
-                if (res.ok) {
-                    const result = await res.json() as { path: Node[]; distance: number; found: boolean };
-                    const meta = document.createElement('div');
-                    meta.className = 'schedule-path-meta';
-                    if (result.found) {
-                        const floors = [...new Set(result.path.map((n: Node) => n.floor).filter(Boolean))];
-                        meta.textContent = floors.length > 1
-                            ? `Multi-floor route (${floors.join(', ')})`
-                            : `Floor ${floors[0] || '?'}`;
-                        item.addEventListener('click', () => {
-                            closeScheduleModal();
-                            displayRoute(result.path, result.distance);
-                        });
-                    } else {
-                        meta.textContent = 'No path found';
-                    }
-                    item.appendChild(meta);
-                } else {
-                    const meta = document.createElement('div');
-                    meta.className = 'schedule-path-notfound';
-                    meta.textContent = 'Route error';
-                    item.appendChild(meta);
-                }
-            } catch {
+            if (!_graph) {
                 const meta = document.createElement('div');
                 meta.className = 'schedule-path-notfound';
-                meta.textContent = 'Server unreachable';
+                meta.textContent = 'Graph not ready';
                 item.appendChild(meta);
+                list.appendChild(item);
+                continue;
             }
+
+            // Compute route client-side
+            const result = findPath(fromNode.uid, toNode.uid, state.allNodesAllFloors, _graph);
+            const meta = document.createElement('div');
+            meta.className = 'schedule-path-meta';
+            if (result.found) {
+                const floors = [...new Set(result.path.map((n: Node) => n.floor).filter(Boolean))];
+                meta.textContent = floors.length > 1
+                    ? `Multi-floor route (${floors.join(', ')})`
+                    : `Floor ${floors[0] || '?'}`;
+                item.addEventListener('click', () => {
+                    closeScheduleModal();
+                    displayRoute(result.path, result.distance);
+                });
+            } else {
+                meta.textContent = 'No path found';
+            }
+            item.appendChild(meta);
 
             list.appendChild(item);
         }
@@ -1166,7 +1117,7 @@
 
     /**
      * Handle the "Navigate" button click — resolve both inputs to nodes and
-     * fetch a route from the server.
+     * compute a route client-side using A* over the pre-built visibility graph.
      *
      * Resolution order for each input:
      *   1. Already-selected node stored in `state.selectedStartNode` / `state.selectedEndNode`
@@ -1175,11 +1126,8 @@
      *   4. Top Fuse.js result if its score is below `SEARCH_CONFIG.FUZZY_THRESHOLD`
      *
      * If resolution fails for either input, shows an error via `showStatusMessage`.
-     * On success, calls `displayRoute` with the server-returned path.
+     * On success, calls `displayRoute` with the computed path.
      * Adds the search pair to recent history and updates the recent UI.
-     *
-     * The button is disabled with "Calculating…" text while the request is in
-     * flight and re-enabled in the `finally` block.
      */
     async function handleFindRoute(): Promise<void> {
         const startInput = document.getElementById('start-input') as HTMLInputElement;
@@ -1224,6 +1172,11 @@
             return;
         }
 
+        if (!_graph) {
+            showStatusMessage('Navigation graph not ready yet. Please wait a moment.', 'warning');
+            return;
+        }
+
         const findRouteBtn = document.getElementById('find-route-btn');
         const originalBtnText = findRouteBtn?.textContent || '';
         if (findRouteBtn) {
@@ -1233,16 +1186,7 @@
 
         try {
             routeLogger.log(`Finding path from ${startRoom} to ${endRoom}...`);
-            const apiUrl = (import.meta as { env: Record<string, string> }).env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL;
-            const res = await fetch(`${apiUrl}/api/route?from=${encodeURIComponent(startNode.uid)}&to=${encodeURIComponent(endNode.uid)}`);
-
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({ error: res.statusText }));
-                showStatusMessage(err.error || 'Server error finding route', 'error');
-                return;
-            }
-
-            const result = await res.json() as { path: Node[]; distance: number; found: boolean };
+            const result = findPath(startNode.uid, endNode.uid, state.allNodesAllFloors, _graph);
 
             if (!result.found) {
                 showStatusMessage('No path found between these locations. They may be on different floors or blocked by walls.', 'error');
@@ -1255,8 +1199,8 @@
             routeLogger.log('Path found:', result);
             displayRoute(result.path, result.distance);
         } catch (err) {
-            logger.error('Route fetch failed:', err);
-            showStatusMessage('Could not reach navigation server. Is it running?', 'error');
+            logger.error('Route calculation failed:', err);
+            showStatusMessage('Route calculation failed. Please try again.', 'error');
         } finally {
             if (findRouteBtn) {
                 findRouteBtn.textContent = originalBtnText;
@@ -1269,13 +1213,12 @@
      * Handle the "Find Nearest Bathroom" button click.
      *
      * Resolves the start-input text to a node (requires the field to be
-     * non-empty; shows a warning otherwise), then calls
-     * `GET /api/route/bathroom?from=<uid>`.
+     * non-empty; shows a warning otherwise), then runs client-side Dijkstra
+     * via `findNearestBathroom` to find the nearest bathroom and calls
+     * `findPath` to compute the full route.
      *
      * On success, calls `displayRoute` with the bathroom path.
-     * Handles 404 (no bathrooms in data) and network errors gracefully.
-     *
-     * The button text changes to "Finding…" while the request is in flight.
+     * Handles no-bathrooms-in-data and graph-not-ready cases gracefully.
      */
     async function handleFindNearestBathroom(): Promise<void> {
         const startInput = document.getElementById('start-input') as HTMLInputElement;
@@ -1297,6 +1240,11 @@
             return;
         }
 
+        if (!_graph) {
+            showStatusMessage('Navigation graph not ready yet. Please wait a moment.', 'warning');
+            return;
+        }
+
         const bathroomBtn = document.getElementById('find-bathroom-btn');
         const originalBtnText = bathroomBtn?.textContent || '';
         if (bathroomBtn) {
@@ -1306,21 +1254,14 @@
 
         try {
             routeLogger.log(`Finding nearest bathroom from ${startRoom}...`);
-            const apiUrl = (import.meta as { env: Record<string, string> }).env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL;
-            const res = await fetch(`${apiUrl}/api/route/bathroom?from=${encodeURIComponent(startNode.uid)}`);
+            const bathroomNode = findNearestBathroom(startNode, state.allNodesAllFloors, _graph);
 
-            if (res.status === 404) {
+            if (!bathroomNode) {
                 showStatusMessage('No bathrooms found', 'error');
                 return;
             }
 
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({ error: res.statusText }));
-                showStatusMessage(err.error || 'Server error finding bathroom', 'error');
-                return;
-            }
-
-            const result = await res.json() as { path: Node[]; distance: number; found: boolean };
+            const result = findPath(startNode.uid, bathroomNode.uid, state.allNodesAllFloors, _graph);
 
             if (!result.found) {
                 showStatusMessage('Could not find a path to the nearest bathroom. It may be blocked by walls.', 'error');
@@ -1330,8 +1271,8 @@
             routeLogger.log('Path to bathroom found:', result);
             displayRoute(result.path, result.distance);
         } catch (err) {
-            logger.error('Bathroom fetch failed:', err);
-            showStatusMessage('Could not reach navigation server. Is it running?', 'error');
+            logger.error('Bathroom calculation failed:', err);
+            showStatusMessage('Bathroom route calculation failed. Please try again.', 'error');
         } finally {
             if (bathroomBtn) {
                 bathroomBtn.textContent = originalBtnText;
@@ -1340,89 +1281,34 @@
         }
     }
 
-    // ========== ADMIN SAVE ==========
-
-    /**
-     * Attach the click listener to the `#save-data` admin button.
-     *
-     * On click, POSTs the current floor's nodes, walls, and traffic zones to
-     * the server via the configured API endpoints:
-     * - `POST /api/nodes?floor=<n>` — if `state.collectedNodes` is non-empty
-     * - `POST /api/walls?floor=<n>` — if `state.collectedWalls` is non-empty
-     * - `POST /api/zones?floor=<n>` — always (even empty array, to clear saved zones)
-     *
-     * Alerts on success or shows the error message on failure.
-     * Called once during startup; only relevant in admin (`?admin`) mode.
-     */
-    function setupSaveButton(): void {
-        const saveBtn = document.getElementById('save-data');
-        if (!saveBtn) return;
-
-        saveBtn.addEventListener('click', async () => {
-            try {
-                const apiUrl = (import.meta as { env: Record<string, string> }).env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL;
-
-                if (state.collectedNodes.length > 0) {
-                    const nodesRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.NODES}?floor=${state.currentFloor}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(state.collectedNodes),
-                    });
-
-                    if (!nodesRes.ok) {
-                        const errorData = await nodesRes.json().catch(() => ({ message: 'Unknown error' }));
-                        throw new Error(`Failed to save nodes: ${errorData.message || nodesRes.statusText}`);
-                    }
-                }
-
-                if (state.collectedWalls.length > 0) {
-                    const wallsRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.WALLS}?floor=${state.currentFloor}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(state.collectedWalls),
-                    });
-
-                    if (!wallsRes.ok) {
-                        const errorData = await wallsRes.json().catch(() => ({ message: 'Unknown error' }));
-                        throw new Error(`Failed to save walls: ${errorData.message || wallsRes.statusText}`);
-                    }
-                }
-
-                // Always POST zones (even empty array, to clear previously saved zones)
-                logger.log('Saving zones payload:', JSON.stringify(state.trafficZones));
-                const zonesRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.ZONES}?floor=${state.currentFloor}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(state.trafficZones),
-                });
-
-                if (!zonesRes.ok) {
-                    const errorData = await zonesRes.json().catch(() => ({ message: 'Unknown error' }));
-                    logger.error('Zones save error response:', errorData);
-                    const detail = errorData.errors
-                        ? JSON.stringify(errorData.errors)
-                        : (errorData.message || zonesRes.statusText);
-                    throw new Error(`Failed to save zones: ${detail}`);
-                }
-
-                alert(`Data saved successfully for Floor ${state.currentFloor}!`);
-            } catch (err) {
-                logger.error('Error saving data:', err);
-                alert(`Error saving data: ${err instanceof Error ? err.message : 'Unknown error'}`);
-            }
-        });
-    }
-
     // ========== WIRE UP CALLBACKS ==========
 
     setRouteDisplayCallbacks({ switchFloor });
 
-    setAdminEditorCallbacks({
-        initializeNavigation,
-        toggleGraphVisualization,
-        updateUI,
-        showStatusMessage,
-    });
+    // Render-only addMarker: places an invisible marker (nodes are not shown in user mode)
+    function addMarker(node: Node): void {
+        if (!state.map) return
+        const marker = L.marker([node.lat, node.lng], {
+            opacity: 0,
+            icon: L.divIcon({ className: 'hidden-marker', html: '', iconSize: [0, 0] }),
+        }).addTo(state.map)
+        state.nodeMarkers[node.uid] = marker
+    }
+
+    // Render-only addWallPolyline: walls are invisible in user mode
+    function addWallPolyline(wallPts: number[][]): L.Polyline {
+        if (!state.map) throw new Error('Map not initialised')
+        const polyline = L.polyline(wallPts as [number, number][], {
+            color: 'red',
+            weight: 4,
+            opacity: 0,
+        }).addTo(state.map)
+        state.wallPolylines.push(polyline)
+        return polyline
+    }
+
+    // toggleGraphVisualization is a no-op in serverless mode (debug feature removed)
+    function toggleGraphVisualization(): void {}
 
     _initMap({
         addMarker,
@@ -1431,13 +1317,8 @@
         redrawRouteForCurrentFloor,
         toggleGraphVisualization,
         initializeNavigation,
-        updateUI,
         createTextParagraph,
     });
-
-    // Wire map click events (map-init registers them via state.map)
-    state.map!.on('click', onMapClick);
-    state.map!.on('dblclick', onMapDoubleClick);
 
     // ========== EVENT LISTENERS ==========
 
@@ -1450,33 +1331,6 @@
     if (clearRouteBtn) clearRouteBtn.addEventListener('click', clearRoute);
     if (findBathroomBtn) findBathroomBtn.addEventListener('click', handleFindNearestBathroom);
 
-    // Admin mode buttons
-    const modeRoomBtn = document.getElementById('mode-room');
-    const modeWaypointBtn = document.getElementById('mode-waypoint');
-    const modeBathroomBtn = document.getElementById('mode-bathroom');
-    const modeStairwayBtn = document.getElementById('mode-stairway');
-    const modeConnectStairwayBtn = document.getElementById('mode-connect-stairway');
-    const modeSpecialBtn = document.getElementById('mode-special');
-    const modeWallBtn = document.getElementById('mode-wall');
-    const toggleGraphBtn = document.getElementById('toggle-graph');
-
-    if (modeRoomBtn) modeRoomBtn.addEventListener('click', () => setMode('room'));
-    if (modeWaypointBtn) modeWaypointBtn.addEventListener('click', () => setMode('waypoint'));
-    if (modeBathroomBtn) modeBathroomBtn.addEventListener('click', () => setMode('bathroom'));
-    if (modeStairwayBtn) modeStairwayBtn.addEventListener('click', () => setMode('stairway'));
-    if (modeConnectStairwayBtn) modeConnectStairwayBtn.addEventListener('click', () => {
-        graphLogger.log('Connect Stairways button clicked');
-        setMode('connect-stairway');
-    });
-    if (modeSpecialBtn) modeSpecialBtn.addEventListener('click', () => setMode('special'));
-    if (modeWallBtn) modeWallBtn.addEventListener('click', () => setMode('wall'));
-    if (toggleGraphBtn) toggleGraphBtn.addEventListener('click', toggleGraphVisualization);
-
-    const modeTrafficZoneBtn = document.getElementById('mode-traffic-zone');
-    if (modeTrafficZoneBtn) modeTrafficZoneBtn.addEventListener('click', () => setMode('traffic-zone'));
-
-    setupDebugToggle();
-    setupSaveButton();
     setupScheduleModal();
 
     // Floor switcher
@@ -1789,16 +1643,6 @@
         }
     }
     
-    #debug-ui {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        z-index: 1000;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        align-items: flex-end;
-    }
     button {
         padding: 10px 16px;
         border: 1px solid var(--panel-border);
