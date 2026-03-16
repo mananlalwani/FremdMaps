@@ -257,14 +257,19 @@
     right: 0;
     width: 100%;
     background: var(--panel-bg);
-    padding: 0 16px 24px 16px;
+    padding: 0 16px calc(24px + env(safe-area-inset-bottom)) 16px;
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     border: 1px solid var(--panel-border);
     border-bottom: none;
     box-shadow: 0 -8px 32px rgba(0,0,0,0.6);
     z-index: 1000;
-    max-height: 45vh;
+    max-height: 45dvh;
     overflow-y: auto;
+    /* Prevent scroll from chaining into the body/map when the panel
+       reaches its top or bottom scroll boundary */
+    overscroll-behavior: contain;
+    /* Suppress 300ms tap delay on the panel's interactive elements */
+    touch-action: manipulation;
     font-family: var(--font-body);
     transition: max-height var(--duration-slow) var(--ease-out), transform var(--duration-slow) var(--ease-out);
     
@@ -275,7 +280,7 @@
   }
   
   #nav-panel.panel-expanded {
-    max-height: 85vh;
+    max-height: 85dvh;
   }
   
   #nav-panel.panel-minimized {
@@ -340,13 +345,13 @@
       max-width: calc(100vw - 32px);
       border-radius: var(--radius-xl);
       border: 1px solid var(--panel-border);
-      max-height: calc(100vh - 32px);
+      max-height: calc(100dvh - 32px);
       padding: 24px;
     }
     
     #nav-panel.panel-minimized,
     #nav-panel.panel-expanded {
-      max-height: calc(100vh - 32px);
+      max-height: calc(100dvh - 32px);
       overflow-y: auto;
     }
     
@@ -966,6 +971,8 @@
 
   .clear-button {
     padding: 3px 8px;
+    /* Expand tap area to 44px without altering the visual size */
+    min-height: 44px;
     background: transparent;
     border: 1px solid var(--panel-border);
     border-radius: var(--radius-sm);
@@ -1050,7 +1057,12 @@
   }
 
   .recent-delete {
+    min-width: 44px;
+    min-height: 44px;
     padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: transparent;
     border: none;
     color: var(--text-muted);
@@ -1089,7 +1101,7 @@
     border: 1px solid var(--amber-500);
     border-radius: var(--radius-lg);
     box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px var(--amber-glow);
-    max-height: 380px;
+    max-height: min(380px, 50dvh);
     overflow: hidden;
     z-index: 1000;
     animation: dropdown-reveal 0.2s var(--ease-out);
@@ -1099,7 +1111,7 @@
   .search-results {
     padding: var(--space-1);
     overflow-y: auto;
-    max-height: 380px;
+    max-height: min(380px, 50dvh);
   }
 
   .search-result-item {
@@ -1182,7 +1194,12 @@
     cursor: pointer;
     transition: all var(--duration-normal) var(--ease-out);
     -webkit-tap-highlight-color: transparent;
-    padding: 4px;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
   }
 
   .result-favorite:hover,
@@ -1194,7 +1211,7 @@
   .result-favorite.active { color: var(--amber-500); }
 
   @media (min-width: 768px) {
-    .result-favorite { font-size: 16px; padding: 0; }
+    .result-favorite { font-size: 16px; min-width: 32px; min-height: 32px; }
   }
 
   @keyframes star-pop {
@@ -1291,7 +1308,7 @@
     border: 1px solid var(--panel-border);
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     box-shadow: 0 -8px 32px rgba(0,0,0,0.6);
-    max-height: 80vh;
+    max-height: 80dvh;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -1303,7 +1320,7 @@
   @media (min-width: 768px) {
     .schedule-modal-inner {
       border-radius: var(--radius-xl);
-      max-height: calc(100vh - 32px);
+      max-height: calc(100dvh - 32px);
     }
   }
 
@@ -1400,12 +1417,19 @@
     background: var(--panel-surface);
     border: 1px solid var(--panel-border);
     border-radius: var(--radius-md);
-    font-size: 13px;
+    /* 16px on mobile prevents iOS Safari from auto-zooming on focus */
+    font-size: 16px;
     font-family: var(--font-body);
     color: var(--text-primary);
     transition: border-color var(--duration-normal) var(--ease-out),
                 box-shadow var(--duration-normal) var(--ease-out);
     box-sizing: border-box;
+  }
+
+  @media (min-width: 768px) {
+    .schedule-period-input {
+      font-size: 13px;
+    }
   }
 
   .schedule-period-input::placeholder {
@@ -1491,7 +1515,7 @@
   .schedule-modal-footer {
     display: flex;
     gap: 8px;
-    padding: 12px 20px 20px;
+    padding: 12px 20px calc(20px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--panel-border);
     position: sticky;
     bottom: 0;

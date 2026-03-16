@@ -9,7 +9,7 @@ import OnboardingOverlay from "../components/OnboardingOverlay.astro";
 		<meta charset="utf-8" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="generator" content={Astro.generator} />
 		<title>Wayfinder - Floor 2</title>
 		
@@ -250,8 +250,8 @@ import OnboardingOverlay from "../components/OnboardingOverlay.astro";
 		<style>
 			#mode-toggle {
 				position: fixed;
-				top: 16px;
-				right: 16px;
+				top: calc(16px + env(safe-area-inset-top));
+				right: calc(16px + env(safe-area-inset-right));
 				z-index: 1001;
 				padding: 12px 16px;
 				background: var(--panel-bg);
@@ -260,7 +260,7 @@ import OnboardingOverlay from "../components/OnboardingOverlay.astro";
 				border-radius: var(--radius-md);
 				font-weight: 600;
 				cursor: pointer;
-				font-size: 11px;
+				font-size: 12px;
 				font-family: var(--font-mono);
 				letter-spacing: 0.5px;
 				text-transform: uppercase;
@@ -270,9 +270,9 @@ import OnboardingOverlay from "../components/OnboardingOverlay.astro";
 			
 			@media (min-width: 768px) {
 				#mode-toggle {
-					bottom: 20px;
+					bottom: calc(20px + env(safe-area-inset-bottom));
 					top: auto;
-					right: 20px;
+					right: calc(20px + env(safe-area-inset-right));
 					padding: 10px 18px;
 					font-size: 12px;
 				}

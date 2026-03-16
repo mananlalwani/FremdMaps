@@ -56,9 +56,12 @@
     inset: 0;
     z-index: 9999;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
-    padding: 24px;
+    /* Use flex-start + padding instead of center so the card is reachable and
+       scrollable when the viewport is shorter than the card (e.g. landscape phone) */
+    padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+    overflow-y: auto;
     background: rgba(10, 10, 16, 0.85);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
@@ -85,6 +88,7 @@
     position: relative;
     width: 100%;
     max-width: 400px;
+    margin: auto;
     background: var(--panel-bg, #16161e);
     border: 1px solid var(--panel-border, rgba(255,255,255,0.06));
     border-radius: var(--radius-xl, 20px);

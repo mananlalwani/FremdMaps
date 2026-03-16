@@ -67,7 +67,12 @@ export function initMap(callbacks: MapInitCallbacks): void {
     crs: L.CRS.Simple,
     minZoom: MIN_ZOOM,
     maxZoom: MAX_ZOOM,
-    inertia: false,
+    // tap: false — use Leaflet's pointer-events path instead of the legacy tap
+    // handler, which conflicts with iOS Safari's touch processing and causes
+    // ghost clicks on first interaction.
+    tap: false,
+    // inertia: true (default) — restores kinetic map panning on mobile so the
+    // map feels natural rather than rigid.
     maxBoundsViscosity: 1.0,
     doubleClickZoom: false,
   })
@@ -83,6 +88,17 @@ export function initMap(callbacks: MapInitCallbacks): void {
   }
 
   leafletMap.fitBounds(bounds)
+
+  // On iOS Safari the visual viewport shrinks when the soft keyboard opens,
+  // but window.innerHeight does not update synchronously.  Calling
+  // invalidateSize() on visualViewport resize ensures the map fills the
+  // correct area after the keyboard shows or hides (e.g. when the user taps
+  // a search input directly above the map).
+  if (typeof window !== 'undefined' && window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      leafletMap.invalidateSize()
+    })
+  }
 
   loadData()
 
