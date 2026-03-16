@@ -2,11 +2,8 @@
     "name": "school-navigation-app",
     "private": true,
     "scripts": {
-        "dev": "concurrently \"pnpm --filter server dev\" \"pnpm --filter client dev\" -n \"SERVER,CLIENT\" -c \"blue,magenta\"",
-        "build": "pnpm -r build",
-        "test": "pnpm -r test"
-    },
-    "devDependencies": {
-        "concurrently": "^8.2.2"
+        "dev": "pnpm --filter client dev",
+        "build": "pnpm --filter client build",
+        "test": "pnpm --filter client test"
     }
 }
