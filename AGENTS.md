@@ -1,26 +1,26 @@
 # Agent Development Guidelines
 
-**Tech Stack**: TypeScript monorepo — Astro (frontend, port 4321) + Express (backend, port 5173)  
-**Purpose**: School indoor navigation with interactive map editing and A* pathfinding  
-**Package Manager**: pnpm with workspaces (`client/`, `server/`)  
+**Tech Stack**: TypeScript — Astro static SPA (port 4321)  
+**Purpose**: School indoor navigation with A* pathfinding  
+**Package Manager**: pnpm with a single workspace (`client/`)  
 **Coordinate System**: Leaflet Simple CRS — `lat` = Y-axis, `lng` = X-axis (NOT real GPS)
 
 ## Commands
 
 ```bash
-pnpm dev                                              # run client + server concurrently
-pnpm --filter server build && pnpm --filter client build  # verify — must be zero errors
+pnpm --filter client dev      # dev server → localhost:4321
+pnpm --filter client build    # production build — must produce zero errors
+pnpm --filter client preview  # preview production build locally
 
-# client/ (Astro → localhost:4321)
-pnpm dev / build / preview / lint / format
-pnpm test                   # Vitest, runs once
-pnpm run test:watch         # Vitest watch mode
-pnpm --filter client test -- run src/utils/pathfinding.test.ts  # single file (from root)
-pnpm vitest run src/utils/pathfinding.test.ts                   # single file (from client/)
+# Tests (run from repo root or client/)
+pnpm --filter client test                                            # Vitest, runs once
+pnpm run test:watch                                                  # Vitest watch mode (from client/)
+pnpm --filter client test -- run src/utils/pathfinding.test.ts      # single file
 pnpm --filter client test -- run --coverage
 
-# server/ (Express → localhost:5173, no auto-reload)
-pnpm dev / build / start / lint / format
+# Lint / format (from client/)
+pnpm lint
+pnpm format
 ```
 
 ## Architecture
@@ -29,34 +29,28 @@ pnpm dev / build / start / lint / format
 client/src/
   components/     Map.astro (orchestrator), NavigationPanel.astro, OnboardingOverlay.astro
   pages/          index.astro — single page, all CSS custom properties defined here
-  map/            map-state.ts, map-init.ts, route-display.ts, admin-editor.ts
+  map/            map-state.ts, map-init.ts, route-display.ts
   workers/        EMPTY — graph builds inline on main thread
   utils/          types.ts, constants.ts, geometry.ts, graph.ts, pathfinding.ts,
-                  search.ts, storage.ts, logger.ts, kalman.ts
+                  search.ts, storage.ts, logger.ts
   config/         featured.ts
 
-server/src/
-  index.ts        Express app, all endpoints, Zod request validation
-  graphCache.ts   In-memory graph; initGraphCache(), getGraph(), invalidateAndRebuild()
-  utils/          Server-side copies of client utils — kept in sync manually
-
-data/floor{1,2}/  nodes.json, walls.json, walls_optimized.json, zones.json
+client/public/
+  data/floor{1,2}/  nodes.json, walls.json, zones.json  ← static navigation data
+  tiles/            map tile images
 ```
 
-**Admin mode**: `?admin` in URL (`urlParams.has('admin')`). Floor 2 is default.  
-**`Map.astro.backup`** is stale — not part of the active codebase.
+There is **no backend server**. All navigation data is served as static JSON from `client/public/data/`. Routing and pathfinding run entirely client-side.
 
-## API Endpoints
+**Admin mode**: `?admin` in URL (`urlParams.has('admin')`). Admin edits are session-only — there is no persistence mechanism without a server. Floor 2 is default.
 
-All accept `?floor=1|2` (default `'2'`). POST bodies validated with Zod.
+## Data Files
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET/POST | `/api/nodes` | Load/save nodes |
-| GET/POST | `/api/walls` | Load/save walls |
-| GET/POST | `/api/zones` | Load/save traffic zones |
-| GET | `/api/route?from=<uid>&to=<uid>` | Server-side A* route |
-| GET | `/api/route/bathroom?from=<uid>` | Nearest bathroom route |
+- `client/public/data/floor{1,2}/nodes.json` — array of `Node` objects (see `types.ts`)
+- `client/public/data/floor{1,2}/walls.json` — array of `[lat, lng][]` wall segments
+- `client/public/data/floor{1,2}/zones.json` — array of `TrafficZone` objects
+
+Edit these files directly to update the floor plan. Run `python3 scripts/snap-nodes.py` after editing node positions to straighten rows/columns.
 
 ## Code Style
 
@@ -71,7 +65,7 @@ import type { Node, Graph } from '../utils/types'            // 3. type-only (al
 ```
 
 **TypeScript**:
-- Strict mode on in both workspaces — no implicit `any`, use `unknown` when type is truly unknown
+- Strict mode on — no implicit `any`, use `unknown` when type is truly unknown
 - Explicit return types on exported functions (convention; ESLint rule is `off`)
 - `const` over `let`; no mutation where avoidable
 - No `.ts` extensions in import paths
@@ -95,10 +89,8 @@ import { logger, graphLogger, routeLogger, searchLogger } from '../utils/logger'
 // levels: .log() .info() .warn() .error() .perf()
 // new subsystem: logger.scope('MyModule')
 ```
-Server uses `console.error` directly.
 
 **Error handling**:
-- Server: `try/catch` → `res.status(500).json({ error: '...' })`
 - Client: early return with structured result — never throw across module boundaries
 - localStorage: guard with `try/catch`, handle `QuotaExceededError`
 
@@ -112,13 +104,12 @@ Server uses `console.error` directly.
 
 - **Visibility graph**: nodes connect when line-of-sight is clear and distance ≤ 800 px (`MAP_CONFIG.MAX_HALLWAY_DISTANCE`); RBush spatial index for O(log W) wall queries
 - **Traffic zones**: `TrafficZone.intensity` multiplies edge cost through congested areas; stored in `zones.json`
-- **Stairways**: cross-floor portal nodes; `connectsTo` array links floors by UID or name
+- **Stairways**: cross-floor portal nodes; `connectsTo` array links floors by name (e.g. `["A"]`)
 - **Node types**: `room` | `waypoint` | `bathroom` | `stairway` — waypoints are invisible, not searchable
 - **Walls on disk**: `[lat, lng][]` arrays; `convertWallData()` converts to `Wall` objects `{start, end}`
-- **`PUBLIC_API_URL`**: set in `client/.env`; read via `import.meta.env.PUBLIC_API_URL`
 
 ## Adding a New Floor
 
-1. Add to `FLOORS.AVAILABLE` in `client/src/utils/constants.ts` (mirror to `server/src/utils/constants.ts`)
-2. Add floor image to `client/public/`
-3. Create `server/data/floor<N>/nodes.json`, `walls.json`, `zones.json` (all `[]`)
+1. Add an entry to `FLOORS.AVAILABLE` in `client/src/utils/constants.ts`.
+2. Add the floor image to `client/public/`.
+3. Create `client/public/data/floor<N>/nodes.json`, `walls.json`, `zones.json` (all `[]`).

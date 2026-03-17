@@ -6,7 +6,8 @@
     ],
     "lat": -2299,
     "lng": 1932,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "7c9f760b-6133-4a4f-912d-3524de120656",
@@ -15,7 +16,8 @@
     ],
     "lat": -2299,
     "lng": 2081.5,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "1bd6e948-507f-4868-a673-18e4dbc6ee86",
@@ -26,7 +28,8 @@
     ],
     "lat": -2299,
     "lng": 2216,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "488fdc98-8d92-422a-926a-b0ba391855c6",
@@ -35,7 +38,8 @@
     ],
     "lat": -2299,
     "lng": 2440,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "10ebcc69-1c6f-446b-af69-568edfcc44a5",
@@ -44,7 +48,8 @@
     ],
     "lat": -2299,
     "lng": 2604,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "a1b28076-d44d-49fd-ba27-a2934a14603c",
@@ -54,7 +59,8 @@
     ],
     "lat": -2299,
     "lng": 2758,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "52aa2f63-5505-4fa7-b7a9-81c74845ddb5",
@@ -64,7 +70,8 @@
     ],
     "lat": -2299,
     "lng": 2935,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "c5707a03-06aa-48b6-9f15-f11649030dfb",
@@ -73,7 +80,8 @@
     ],
     "lat": -2299,
     "lng": 3142,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "996ef023-15f1-4078-a4a1-57d902e5bea7",
@@ -82,7 +90,8 @@
     ],
     "lat": -2299,
     "lng": 3362,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "134d627c-e412-4c22-918f-ebf7dec7ce82",
@@ -91,7 +100,8 @@
     ],
     "lat": -2299,
     "lng": 3765,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "fa409a53-82b5-40e2-b5dd-5e50da1be6db",
@@ -100,7 +110,8 @@
     ],
     "lat": -2299,
     "lng": 4264,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "ab19cac9-52ea-466b-951c-9056a537e8d1",
@@ -111,7 +122,8 @@
     ],
     "lat": -2299,
     "lng": 4264,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "40da52b7-8daa-4d81-84dc-31cc28db94f7",
@@ -121,7 +133,8 @@
     ],
     "lat": -2722,
     "lng": 4264,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "0c8d1520-48e0-46ea-a3c8-75aaa43aafbc",
@@ -131,7 +144,8 @@
     ],
     "lat": -2802,
     "lng": 4264,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "17a7f7cd-cd13-4390-b80f-532fe6875ef8",
@@ -140,7 +154,8 @@
     ],
     "lat": -2996,
     "lng": 4264,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "8d0df08d-c422-482a-8bf9-ce3ce84c5fe9",
@@ -150,7 +165,8 @@
     ],
     "lat": -3161,
     "lng": 4264,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "c6da3e84-e1f4-4575-b447-0776d485474b",
@@ -160,7 +176,8 @@
     ],
     "lat": -3444,
     "lng": 4264,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "c1fabd3d-098c-4100-b5db-2e11573ab8cb",
@@ -170,7 +187,8 @@
     ],
     "lat": -3552,
     "lng": 4264,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "bb05707c-03a5-4ebc-b905-cb2a57d17765",
@@ -179,7 +197,8 @@
     ],
     "lat": -3686,
     "lng": 4264,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "3ad23a39-3e35-4b3e-b8f2-9b33acd6d812",
@@ -188,7 +207,8 @@
     ],
     "lat": -3686,
     "lng": 3912,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "1fddf816-6c67-4bcd-aa13-32061653049c",
@@ -198,7 +218,8 @@
     ],
     "lat": -3686,
     "lng": 3552,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "61244079-a190-42e0-b5e4-7c3924efc9a7",
@@ -208,7 +229,8 @@
     ],
     "lat": -3444,
     "lng": 3765,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "e49c22a4-4daa-44b4-b69d-78800d277916",
@@ -217,7 +239,8 @@
     ],
     "lat": -3161,
     "lng": 3765,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "4365238f-b7ac-44f8-addd-e448c8b45f34",
@@ -227,7 +250,8 @@
     ],
     "lat": -2996,
     "lng": 3765,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "72cea6e7-b3fc-4e2e-bc36-b7e775ecadc5",
@@ -236,7 +260,8 @@
     ],
     "lat": -2600,
     "lng": 3765,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "ee2dc512-b118-43ce-9548-b6a682b56d46",
@@ -245,7 +270,8 @@
     ],
     "lat": -2299,
     "lng": 3765,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "908e016c-0906-4fe4-b173-3a2b5f2a9ec7",
@@ -254,7 +280,8 @@
     ],
     "lat": -3686,
     "lng": 3142,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "61b7691a-5499-40d3-8e39-b343aa9c2df9",
@@ -264,7 +291,8 @@
     ],
     "lat": -3686,
     "lng": 2935,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "6a040600-d1be-42f0-b5bf-7abdbc80506a",
@@ -274,7 +302,8 @@
     ],
     "lat": -3686,
     "lng": 2758,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "d32a738f-aafb-465e-8250-b0ba6771e5cd",
@@ -284,7 +313,8 @@
     ],
     "lat": -3686,
     "lng": 2604,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "60d8d8e2-77c4-4603-a6e5-d4507b678272",
@@ -294,7 +324,8 @@
     ],
     "lat": -3686,
     "lng": 2440,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "d39e0623-0a8a-4159-b3d0-18db359214a2",
@@ -304,7 +335,8 @@
     ],
     "lat": -3686,
     "lng": 2216,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "7f0144b6-1870-4838-aba0-356ec1eec79f",
@@ -314,7 +346,8 @@
     ],
     "lat": -3686,
     "lng": 2081.5,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "5ea93e6d-25f3-4742-9924-9317bce933d9",
@@ -324,7 +357,8 @@
     ],
     "lat": -3686,
     "lng": 1932,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "7ebb7da4-8762-48fc-84d0-9b87de7efc53",
@@ -334,7 +368,8 @@
     ],
     "lat": -2996,
     "lng": 2081.5,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "59c71b2e-c327-4c31-9f76-1766fd21d9af",
@@ -344,7 +379,8 @@
     ],
     "lat": -2996,
     "lng": 2604,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "218441e7-06a9-461e-bee5-2a9760a6fe80",
@@ -354,7 +390,8 @@
     ],
     "lat": -2996,
     "lng": 2935,
-    "floor": "2"
+    "floor": "2",
+    "type": "room"
   },
   {
     "uid": "e84f6824-26cd-4371-a538-de1f58057466",
