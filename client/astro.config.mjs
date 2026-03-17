@@ -51,6 +51,11 @@ export default defineConfig({
         // Don't limit precache size — tiles can be ~20 MB total
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10 MB per file
 
+        // SPA fallback — serve index.html for any offline navigation request
+        // that isn't an asset (so hard-reload at any URL works offline)
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/_astro\//, /\/data\//, /\/tiles\//, /\/icons\//, /\.(?:png|svg|ico|json|webmanifest|js|css|xml)$/],
+
         runtimeCaching: [
           // Google Fonts CSS — stale-while-revalidate so offline falls back to cache
           {
