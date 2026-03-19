@@ -1,5 +1,5 @@
 ---
-import Map from "../components/Map.astro";
+import MapView from "../components/Map.astro";
 import NavigationPanel from "../components/NavigationPanel.astro";
 import OnboardingOverlay from "../components/OnboardingOverlay.astro";
 import { pwaInfo } from 'virtual:pwa-info';
@@ -203,12 +203,57 @@ import { pwaInfo } from 'virtual:pwa-info';
 		</style>
 	</head>
 	<body>
-		<Map />
+		<MapView />
 		<NavigationPanel />
 		<OnboardingOverlay />
 		<script>
 			import { registerSW } from 'virtual:pwa-register'
 			registerSW({ immediate: true })
+
+			const urlParams = new URLSearchParams(window.location.search)
+			const showPwaDebug = import.meta.env.DEV || urlParams.has('admin')
+
+			if (showPwaDebug) {
+				const badge = document.createElement('div')
+				badge.id = 'pwa-debug-badge'
+				badge.style.position = 'fixed'
+				badge.style.left = '12px'
+				badge.style.bottom = '12px'
+				badge.style.zIndex = '9999'
+				badge.style.padding = '8px 10px'
+				badge.style.borderRadius = '10px'
+				badge.style.background = 'rgba(22, 22, 30, 0.92)'
+				badge.style.border = '1px solid rgba(255, 255, 255, 0.1)'
+				badge.style.color = '#e8e6e1'
+				badge.style.fontFamily = 'var(--font-mono)'
+				badge.style.fontSize = '11px'
+				badge.style.maxWidth = 'min(92vw, 680px)'
+				badge.style.lineHeight = '1.4'
+				badge.style.wordBreak = 'break-word'
+				badge.style.boxShadow = '0 8px 24px rgba(0,0,0,0.45)'
+				badge.textContent = `Origin: ${window.location.origin} | SW: checking...`
+
+				document.body.appendChild(badge)
+
+				if ('serviceWorker' in navigator) {
+					navigator.serviceWorker
+						.getRegistration()
+						.then((registration) => {
+							if (!registration) {
+								badge.textContent = `Origin: ${window.location.origin} | SW: not registered`
+								return
+							}
+
+							const swStatus = registration.active ? 'active' : 'installing/waiting'
+							badge.textContent = `Origin: ${window.location.origin} | SW: ${swStatus} | Scope: ${registration.scope}`
+						})
+						.catch(() => {
+							badge.textContent = `Origin: ${window.location.origin} | SW: registration check failed`
+						})
+				} else {
+					badge.textContent = `Origin: ${window.location.origin} | SW: unsupported`
+				}
+			}
 		</script>
 	</body>
 </html>
