@@ -214,6 +214,8 @@ import { pwaInfo } from 'virtual:pwa-info';
 			const showPwaDebug = import.meta.env.DEV || urlParams.has('admin')
 
 			if (showPwaDebug) {
+				const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 				const badge = document.createElement('div')
 				badge.id = 'pwa-debug-badge'
 				badge.style.position = 'fixed'
@@ -236,9 +238,21 @@ import { pwaInfo } from 'virtual:pwa-info';
 				document.body.appendChild(badge)
 
 				if ('serviceWorker' in navigator) {
-					navigator.serviceWorker
-						.getRegistration()
-						.then((registration) => {
+					const updateBadge = async () => {
+						try {
+							let registration = await navigator.serviceWorker.getRegistration()
+
+							if (!registration) {
+								badge.textContent = `Origin: ${window.location.origin} | SW: registering...`
+								for (let attempt = 0; attempt < 10; attempt += 1) {
+									await sleep(250)
+									registration = await navigator.serviceWorker.getRegistration()
+									if (registration) {
+										break
+									}
+								}
+							}
+
 							if (!registration) {
 								badge.textContent = `Origin: ${window.location.origin} | SW: not registered`
 								return
@@ -246,10 +260,15 @@ import { pwaInfo } from 'virtual:pwa-info';
 
 							const swStatus = registration.active ? 'active' : 'installing/waiting'
 							badge.textContent = `Origin: ${window.location.origin} | SW: ${swStatus} | Scope: ${registration.scope}`
-						})
-						.catch(() => {
+						} catch {
 							badge.textContent = `Origin: ${window.location.origin} | SW: registration check failed`
-						})
+						}
+					}
+
+					void updateBadge()
+					navigator.serviceWorker.addEventListener('controllerchange', () => {
+						void updateBadge()
+					})
 				} else {
 					badge.textContent = `Origin: ${window.location.origin} | SW: unsupported`
 				}
