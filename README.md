@@ -43,3 +43,5 @@ data/     JSON data files per floor (nodes, walls, zones)
 
 - **`AGENTS.md`** — full developer reference: architecture, code style, commands, domain concepts
 - **`server/scripts/README.md`** — Python wall-extraction scripts for generating `walls.json` from floor-plan images
+
+_Minor docs touchpoint commit for deployment trigger._
