@@ -208,7 +208,14 @@ import { pwaInfo } from 'virtual:pwa-info';
 		<OnboardingOverlay />
 		<script>
 			import { registerSW } from 'virtual:pwa-register'
-			registerSW({ immediate: true })
+
+			let swRegisterError = ''
+			registerSW({
+				immediate: true,
+				onRegisterError(error) {
+					swRegisterError = error instanceof Error ? error.message : String(error)
+				},
+			})
 
 			const urlParams = new URLSearchParams(window.location.search)
 			const showPwaDebug = import.meta.env.DEV || urlParams.has('admin')
@@ -240,6 +247,11 @@ import { pwaInfo } from 'virtual:pwa-info';
 				if ('serviceWorker' in navigator) {
 					const updateBadge = async () => {
 						try {
+							if (swRegisterError) {
+								badge.textContent = `Origin: ${window.location.origin} | SW error: ${swRegisterError}`
+								return
+							}
+
 							let registration = await navigator.serviceWorker.getRegistration()
 
 							if (!registration) {
@@ -254,7 +266,9 @@ import { pwaInfo } from 'virtual:pwa-info';
 							}
 
 							if (!registration) {
-								badge.textContent = `Origin: ${window.location.origin} | SW: not registered`
+								const registrations = await navigator.serviceWorker.getRegistrations()
+								const swCheck = await fetch('/sw.js', { cache: 'no-store' })
+								badge.textContent = `Origin: ${window.location.origin} | SW: not registered | regs: ${registrations.length} | /sw.js: ${swCheck.status}`
 								return
 							}
 
