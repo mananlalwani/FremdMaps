@@ -4,6 +4,11 @@
     "scripts": {
         "dev": "pnpm --filter client dev",
         "build": "pnpm --filter client build",
-        "test": "pnpm --filter client test"
+        "test": "pnpm --filter client test",
+        "deploy": "pnpm run build && wrangler deploy",
+        "preview": "pnpm run build && wrangler dev"
+    },
+    "devDependencies": {
+        "wrangler": "4.78.0"
     }
 }
