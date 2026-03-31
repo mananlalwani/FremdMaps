@@ -1297,25 +1297,14 @@
 
     setRouteDisplayCallbacks({ switchFloor });
 
-    // Render-only addMarker: places an invisible marker (nodes are not shown in user mode)
+    // User mode does not display node markers; skip creating Leaflet layers.
     function addMarker(node: Node): void {
-        if (!state.map) return
-        const marker = L.marker([node.lat, node.lng], {
-            opacity: 0,
-            icon: L.divIcon({ className: 'hidden-marker', html: '', iconSize: [0, 0] }),
-        }).addTo(state.map)
-        state.nodeMarkers[node.uid] = marker
+        void node
     }
 
-    // Render-only addWallPolyline: walls are invisible in user mode
+    // User mode does not display walls; skip creating Leaflet layers.
     function addWallPolyline(wallPts: number[][]): void {
-        if (!state.map) throw new Error('Map not initialised')
-        const polyline = L.polyline(wallPts as [number, number][], {
-            color: 'red',
-            weight: 4,
-            opacity: 0,
-        }).addTo(state.map)
-        state.wallPolylines.push(polyline)
+        void wallPts
     }
 
     _initMap({
