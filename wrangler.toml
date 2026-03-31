@@ -1,4 +1,4 @@
-name = "wayfinder"
+name = "schoolwayfinder"
 main = "worker/index.ts"
 compatibility_date = "2026-03-30"
 
