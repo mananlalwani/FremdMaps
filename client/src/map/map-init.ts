@@ -251,10 +251,6 @@ async function loadAllFloorsNavigationData(): Promise<void> {
  * and `route-display`.
  */
 export interface MapInitCallbacks {
-  /** Place (or replace) a Leaflet marker for a node on the current floor. */
-  addMarker: (node: Node) => void
-  /** Render a wall as a Leaflet polyline and register its click handler. */
-  addWallPolyline: (wallPts: number[][]) => void
   /** Remove all route visuals and reset route state. */
   clearRoute: () => void
   /** Re-render the stored multi-floor route for the newly active floor. */
@@ -427,34 +423,16 @@ export function switchFloor(floorId: string): void {
 }
 
 /**
- * Remove all node markers and wall polylines from the map.
+ * Remove all traffic zone overlays from the map.
  */
 export function clearMapData(): void {
-  Object.values(state.nodeMarkers).forEach(marker => {
-    state.map?.removeLayer(marker)
-  })
-  state.nodeMarkers = {}
-
-  state.wallPolylines.forEach(polyline => {
-    state.map?.removeLayer(polyline)
-  })
-  state.wallPolylines = []
-
-  if (state.currentWallPolyline) {
-    state.map?.removeLayer(state.currentWallPolyline)
-    state.currentWallPolyline = null
+  for (const rect of state.trafficZoneRects) {
+    state.map?.removeLayer(rect)
   }
+  state.trafficZoneRects = []
+  state.trafficZones = []
 
-  graphLogger.info('Cleared all map data (nodes and walls)')
-}
-
-/**
- * (Re-)render the currently loaded nodes and walls on the map.
- */
-export function renderMapData(): void {
-  for (const node of state.collectedNodes) { _cb.addMarker(node) }
-  for (const wallPts of state.collectedWalls) { _cb.addWallPolyline(wallPts) }
-  graphLogger.info(`Rendered ${state.collectedNodes.length} nodes and ${state.collectedWalls.length} walls`)
+  graphLogger.info('Cleared floor overlays')
 }
 
 /**
@@ -462,13 +440,12 @@ export function renderMapData(): void {
  * JSON files in `/public/data/`, then trigger navigation initialisation.
  *
  * Sequence:
- * 1. `clearMapData` — remove current markers and polylines from the Leaflet map.
+ * 1. `clearMapData` — remove floor overlays from the Leaflet map.
  * 2. Fetch `/data/floor<N>/nodes.json` and `/data/floor<N>/walls.json`.
  * 3. Fetch `/data/floor<N>/zones.json`.
- * 4. `renderMapData` — add markers and wall polylines for the new floor.
- * 5. `loadAllNodesAllFloors` + `loadAllFloorsWalls` — refresh the cross-floor
+ * 4. `loadAllNodesAllFloors` + `loadAllFloorsWalls` — refresh the cross-floor
  *    node/wall pools used by the visibility-graph builder.
- * 6. `initializeNavigation` — rebuild the graph and A* cache.
+ * 5. `initializeNavigation` — rebuild the graph and A* cache.
  *
  * On any network or parse error, logs to `logger.error` and displays a
  * human-readable message in the `#empty-state` panel.
@@ -491,13 +468,6 @@ export async function loadData(): Promise<void> {
     const rawWalls: unknown = await wallsRes.json()
     state.collectedWalls = parseWalls(rawWalls, `floor${state.currentFloor}/walls.json`)
 
-    // Remove old traffic zone rects from the map before reloading
-    for (const rect of state.trafficZoneRects) {
-      state.map?.removeLayer(rect)
-    }
-    state.trafficZoneRects = []
-    state.trafficZones = []
-
     const zonesRes = await fetch(`/data/floor${state.currentFloor}/zones.json`)
     if (zonesRes.ok) {
       const rawZones: unknown = await zonesRes.json()
@@ -507,8 +477,6 @@ export async function loadData(): Promise<void> {
     } else {
       logger.warn(`Failed to load zones for floor ${state.currentFloor}: ${zonesRes.status}`)
     }
-
-    renderMapData()
 
     if (!state.hasLoadedGlobalNavigationData) {
       await loadAllFloorsNavigationData()

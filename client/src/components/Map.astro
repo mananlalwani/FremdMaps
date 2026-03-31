@@ -1297,19 +1297,7 @@
 
     setRouteDisplayCallbacks({ switchFloor });
 
-    // User mode does not display node markers; skip creating Leaflet layers.
-    function addMarker(node: Node): void {
-        void node
-    }
-
-    // User mode does not display walls; skip creating Leaflet layers.
-    function addWallPolyline(wallPts: number[][]): void {
-        void wallPts
-    }
-
     _initMap({
-        addMarker,
-        addWallPolyline,
         clearRoute,
         redrawRouteForCurrentFloor,
         initializeNavigation,

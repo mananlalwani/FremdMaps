@@ -1,7 +1,7 @@
 /**
  * Shared mutable state for the map components.
  *
- * All modules (map-init, route-display, admin-editor) import from this file so
+ * All modules (map-init, route-display) import from this file so
  * they operate on the same references. Primitive values that modules need to
  * mutate are wrapped in the single exported `state` object so callers can write
  * `state.currentFloor = '2'` and every other module reading `state.currentFloor`
@@ -59,16 +59,6 @@ export interface MapState {
 
   // Leaflet objects
 
-  /** Map from node UID to its `L.Marker` on the Leaflet map. */
-  nodeMarkers: Record<string, L.Marker>
-  /**
-   * Polylines representing walls on the current floor.
-   * INVARIANT: kept in the same insertion order as `collectedWalls` so that
-   * `deleteWall` can splice both arrays at the same index.
-   */
-  wallPolylines: L.Polyline[]
-  /** The in-progress wall being drawn (single-click accumulation), or `null`. */
-  currentWallPolyline: L.Polyline | null
   /** The Leaflet map instance, `null` before `initMap` is called. */
   map: L.Map | null
   /** The current floor image overlay, `null` before `initMap` is called. */
@@ -137,9 +127,6 @@ export const state: MapState = {
   allTrafficZones: [],
   hasLoadedGlobalNavigationData: false,
 
-  nodeMarkers: {},
-  wallPolylines: [],
-  currentWallPolyline: null,
   map: null,
   currentImageOverlay: null,
 
