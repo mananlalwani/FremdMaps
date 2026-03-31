@@ -14,16 +14,6 @@
     </button>
 </div>
 
-<!-- Quick Nav Button (Mobile - shows when panel minimized) -->
-<button id="quick-nav-btn" style="display: none;">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="10" r="3"></circle>
-        <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"></path>
-    </svg>
-    Navigate
-</button>
-
-
 <script>
     import "leaflet/dist/leaflet.css";
     import L from "leaflet";
@@ -1218,6 +1208,7 @@
 
             routeLogger.log('Path found:', result);
             displayRoute(result.path, result.distance);
+            collapsePanelForRoute();
         } catch (err) {
             logger.error('Route calculation failed:', err);
             showStatusMessage('Route calculation failed. Please try again.', 'error');
@@ -1290,6 +1281,7 @@
 
             routeLogger.log('Path to bathroom found:', result);
             displayRoute(result.path, result.distance);
+            collapsePanelForRoute();
         } catch (err) {
             logger.error('Bathroom calculation failed:', err);
             showStatusMessage('Bathroom route calculation failed. Please try again.', 'error');
@@ -1374,8 +1366,14 @@
     // Mobile panel collapse/expand
     const navPanel = document.getElementById('nav-panel');
     const panelHandle = document.getElementById('panel-handle');
-    const quickNavBtn = document.getElementById('quick-nav-btn');
     let panelState: 'normal' | 'expanded' | 'minimized' = 'normal';
+
+    function collapsePanelForRoute(): void {
+        if (!navPanel || window.innerWidth >= 768) return;
+        navPanel.classList.remove('panel-expanded');
+        navPanel.classList.add('panel-minimized');
+        panelState = 'minimized';
+    }
 
     function setupMobileKeyboardAvoidance(): void {
         if (!navPanel || typeof window === 'undefined' || !window.visualViewport) return;
@@ -1385,7 +1383,6 @@
         const applyKeyboardInset = (): void => {
             if (!isMobile()) {
                 navPanel.style.bottom = '';
-                if (quickNavBtn) quickNavBtn.style.bottom = '';
                 return;
             }
 
@@ -1393,9 +1390,6 @@
             const keyboardInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
 
             navPanel.style.bottom = `${keyboardInset}px`;
-            if (quickNavBtn) {
-                quickNavBtn.style.bottom = `calc(${keyboardInset}px + 16px + env(safe-area-inset-bottom))`;
-            }
         };
 
         const activeInputSelector = 'input, textarea, [contenteditable="true"]';
@@ -1419,33 +1413,6 @@
         applyKeyboardInset();
     }
 
-    /**
-     * Show or hide the floating `#quick-nav-btn` based on the current panel
-     * state and viewport width.
-     *
-     * The button is only relevant on mobile (< 768 px) and is visible only
-     * when the navigation panel is fully minimized, giving users a one-tap
-     * way to restore the panel without needing to find the drag handle.
-     */
-    function updateQuickNavButton(): void {
-        if (quickNavBtn && window.innerWidth < 768) {
-            quickNavBtn.style.display = panelState === 'minimized' ? 'flex' : 'none';
-        } else if (quickNavBtn) {
-            quickNavBtn.style.display = 'none';
-        }
-    }
-
-    if (quickNavBtn) {
-        quickNavBtn.addEventListener('click', () => {
-            if (navPanel) {
-                navPanel.classList.remove('panel-minimized');
-                navPanel.classList.remove('panel-expanded');
-                panelState = 'normal';
-                updateQuickNavButton();
-            }
-        });
-    }
-
     if (panelHandle && navPanel) {
         panelHandle.addEventListener('click', () => {
             if (window.innerWidth < 768) {
@@ -1458,7 +1425,6 @@
                     navPanel.classList.add('panel-minimized');
                     panelState = 'minimized';
                 }
-                updateQuickNavButton();
             }
         });
 
@@ -1472,7 +1438,6 @@
                         navPanel.classList.remove('panel-expanded');
                         navPanel.classList.add('panel-minimized');
                         panelState = 'minimized';
-                        updateQuickNavButton();
                     }
                     lastTap = now;
                 }
@@ -1480,8 +1445,6 @@
         }
     }
 
-    window.addEventListener('resize', updateQuickNavButton);
-    updateQuickNavButton();
     setupMobileKeyboardAvoidance();
 
     // Cleanup on page unload
@@ -1664,50 +1627,6 @@
             max-width: calc(100% - 40px);
             flex-wrap: wrap;
             justify-content: center;
-        }
-    }
-    
-    /* Quick Nav Button (Mobile) */
-    #quick-nav-btn {
-        position: fixed;
-        bottom: calc(16px + env(safe-area-inset-bottom));
-        right: calc(16px + env(safe-area-inset-right));
-        z-index: 1001;
-        background: var(--amber-500);
-        color: var(--panel-bg);
-        border: none;
-        border-radius: var(--radius-full);
-        padding: 14px 24px;
-        font-size: 15px;
-        font-weight: 700;
-        font-family: var(--font-body);
-        box-shadow: 0 4px 20px rgba(240, 165, 0, 0.4);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        transition: all var(--duration-normal) var(--ease-out);
-        -webkit-tap-highlight-color: transparent;
-    }
-    
-    #quick-nav-btn:hover {
-        background: var(--amber-400);
-        box-shadow: 0 6px 24px rgba(240, 165, 0, 0.5);
-        transform: translateY(-2px);
-    }
-    
-    #quick-nav-btn:active {
-        transform: scale(0.95) translateY(0);
-    }
-    
-    #quick-nav-btn svg {
-        width: 20px;
-        height: 20px;
-    }
-    
-    @media (min-width: 768px) {
-        #quick-nav-btn {
-            display: none !important;
         }
     }
     

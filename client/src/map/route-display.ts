@@ -58,21 +58,15 @@ export function displayRoute(path: Node[], _totalDistance: number): void {
   const isMultiFloor = floors.length > 1
   routeLogger.log(`Route: ${path.length} nodes, floors: ${floors.join(', ')}, multi-floor: ${isMultiFloor}`)
 
+  const startFloor = path[0]?.floor
+  if (startFloor && startFloor !== state.currentFloor) {
+    routeLogger.log(`Switching to route start floor ${startFloor} from ${state.currentFloor}`)
+    _cb.switchFloor(startFloor)
+    return
+  }
+
   if (isMultiFloor) {
     routeLogger.log(`Multi-floor route detected: ${floors.join(', ')}`)
-
-    const startFloor = path[0].floor
-    if (startFloor && startFloor !== state.currentFloor) {
-      _cb.switchFloor(startFloor)
-      // Delay the redraw by 100 ms to let switchFloor finish loading the floor
-      // image and data before we try to paint the route polylines.  Without this
-      // guard the polylines can render before the image overlay is ready and
-      // appear on the wrong floor.
-      setTimeout(() => {
-        redrawRouteForCurrentFloor()
-      }, 100)
-      return
-    }
   }
 
   redrawRouteForCurrentFloor()
