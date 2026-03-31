@@ -1377,6 +1377,48 @@
     const quickNavBtn = document.getElementById('quick-nav-btn');
     let panelState: 'normal' | 'expanded' | 'minimized' = 'normal';
 
+    function setupMobileKeyboardAvoidance(): void {
+        if (!navPanel || typeof window === 'undefined' || !window.visualViewport) return;
+
+        const isMobile = () => window.innerWidth < 768;
+
+        const applyKeyboardInset = (): void => {
+            if (!isMobile()) {
+                navPanel.style.bottom = '';
+                if (quickNavBtn) quickNavBtn.style.bottom = '';
+                return;
+            }
+
+            const viewport = window.visualViewport;
+            const keyboardInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+
+            navPanel.style.bottom = `${keyboardInset}px`;
+            if (quickNavBtn) {
+                quickNavBtn.style.bottom = `calc(${keyboardInset}px + 16px + env(safe-area-inset-bottom))`;
+            }
+        };
+
+        const activeInputSelector = 'input, textarea, [contenteditable="true"]';
+        document.addEventListener('focusin', (event) => {
+            const target = event.target as Element | null;
+            if (!target || !target.matches(activeInputSelector)) return;
+            window.setTimeout(() => {
+                (target as HTMLElement).scrollIntoView({ block: 'center', behavior: 'smooth' });
+            }, 120);
+            applyKeyboardInset();
+        });
+
+        document.addEventListener('focusout', () => {
+            window.setTimeout(applyKeyboardInset, 100);
+        });
+
+        window.visualViewport.addEventListener('resize', applyKeyboardInset);
+        window.addEventListener('orientationchange', applyKeyboardInset);
+        window.addEventListener('resize', applyKeyboardInset);
+
+        applyKeyboardInset();
+    }
+
     /**
      * Show or hide the floating `#quick-nav-btn` based on the current panel
      * state and viewport width.
@@ -1440,6 +1482,7 @@
 
     window.addEventListener('resize', updateQuickNavButton);
     updateQuickNavButton();
+    setupMobileKeyboardAvoidance();
 
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {
