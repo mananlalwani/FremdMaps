@@ -254,7 +254,7 @@ export interface MapInitCallbacks {
   /** Place (or replace) a Leaflet marker for a node on the current floor. */
   addMarker: (node: Node) => void
   /** Render a wall as a Leaflet polyline and register its click handler. */
-  addWallPolyline: (wallPts: number[][]) => L.Polyline
+  addWallPolyline: (wallPts: number[][]) => void
   /** Remove all route visuals and reset route state. */
   clearRoute: () => void
   /** Re-render the stored multi-floor route for the newly active floor. */
@@ -266,6 +266,28 @@ export interface MapInitCallbacks {
 }
 
 let _cb: MapInitCallbacks
+let navigationInitRequestId = 0
+
+function scheduleNavigationInitialization(requestId: number): void {
+  const run = async () => {
+    if (requestId !== navigationInitRequestId) return
+    await _cb.initializeNavigation()
+  }
+
+  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    ;(window as Window & { requestIdleCallback: (cb: () => void, options?: { timeout: number }) => number }).requestIdleCallback(
+      () => {
+        void run()
+      },
+      { timeout: 250 }
+    )
+    return
+  }
+
+  window.setTimeout(() => {
+    void run()
+  }, 0)
+}
 
 /**
  * Initialise the Leaflet map and start loading data.
@@ -287,6 +309,7 @@ export function initMap(callbacks: MapInitCallbacks): void {
     crs: L.CRS.Simple,
     minZoom: MIN_ZOOM,
     maxZoom: MAX_ZOOM,
+    preferCanvas: true,
     // tap: false — use Leaflet's pointer-events path instead of the legacy tap
     // handler, which conflicts with iOS Safari's touch processing and causes
     // ghost clicks on first interaction.
@@ -497,7 +520,8 @@ export async function loadData(): Promise<void> {
       state.allTrafficZones = state.trafficZones
     }
 
-    await _cb.initializeNavigation()
+    navigationInitRequestId += 1
+    scheduleNavigationInitialization(navigationInitRequestId)
   } catch (err) {
     logger.error('Failed to load data:', err)
     const emptyState = document.getElementById('empty-state')

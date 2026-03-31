@@ -75,6 +75,8 @@
 
     /** Visibility graph built by initializeNavigation; used by handleFindRoute and handleFindNearestBathroom. */
     let _graph: Graph | null = null
+    let _graphCacheKey = ''
+    let _searchEnhancementsInitialized = false
 
     // ========== SAFE DOM HELPERS (XSS Prevention) ==========
 
@@ -268,17 +270,30 @@
             return;
         }
 
-        graphLogger.log('Building visibility graph client-side...');
-        _graph = buildVisibilityGraph(
-            state.allNodesAllFloors,
-            state.wallObjects,
-            MAP_CONFIG.MAX_HALLWAY_DISTANCE,
-            state.allTrafficZones
-        );
-        graphLogger.log('Visibility graph built.');
+        const graphCacheKey = `${state.allNodesAllFloors.length}:${state.wallObjects.length}:${state.allTrafficZones.length}`;
 
-        invalidateSearchCache();
-        initializeSearchEnhancements();
+        if (!_graph || _graphCacheKey !== graphCacheKey) {
+            graphLogger.log('Building visibility graph client-side...');
+            _graph = buildVisibilityGraph(
+                state.allNodesAllFloors,
+                state.wallObjects,
+                MAP_CONFIG.MAX_HALLWAY_DISTANCE,
+                state.allTrafficZones
+            );
+            _graphCacheKey = graphCacheKey;
+            graphLogger.log('Visibility graph built.');
+            invalidateSearchCache();
+        } else {
+            graphLogger.log('Reusing cached visibility graph.');
+        }
+
+        if (!_searchEnhancementsInitialized) {
+            initializeSearchEnhancements();
+            _searchEnhancementsInitialized = true;
+        } else {
+            updateRecentSearchesUI();
+            updateFavoritesUI();
+        }
 
         const emptyState = document.getElementById('empty-state');
         if (emptyState) {
@@ -1301,7 +1316,7 @@
     }
 
     // Render-only addWallPolyline: walls are invisible in user mode
-    function addWallPolyline(wallPts: number[][]): L.Polyline {
+    function addWallPolyline(wallPts: number[][]): void {
         if (!state.map) throw new Error('Map not initialised')
         const polyline = L.polyline(wallPts as [number, number][], {
             color: 'red',
@@ -1309,7 +1324,6 @@
             opacity: 0,
         }).addTo(state.map)
         state.wallPolylines.push(polyline)
-        return polyline
     }
 
     _initMap({
