@@ -67,6 +67,10 @@
         clearRoute
     } from "../map/route-display";
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const adminRequested = urlParams.has('admin');
+    const isAdminEnabled = import.meta.env.DEV || import.meta.env.PUBLIC_ENABLE_ADMIN === 'true';
+
     // ========== GRAPH STATE ==========
 
     /** Visibility graph built by initializeNavigation; used by handleFindRoute and handleFindNearestBathroom. */
@@ -269,7 +273,7 @@
             state.allNodesAllFloors,
             state.wallObjects,
             MAP_CONFIG.MAX_HALLWAY_DISTANCE,
-            state.trafficZones
+            state.allTrafficZones
         );
         graphLogger.log('Visibility graph built.');
 
@@ -306,7 +310,7 @@
      *
      * - `info` / `warning` messages auto-clear after `UI_CONFIG.STATUS_MESSAGE_TIMEOUT_MS`.
      * - `error` messages persist until overwritten.
-     * - Falls back to `alert()` if the status element is not in the DOM.
+     * - If route-status UI is missing, logs a warning and returns (no blocking dialogs).
      *
      * @param message - Text to show the user
      * @param type    - Severity level; controls colour and auto-clear behaviour
@@ -314,24 +318,25 @@
     function showStatusMessage(message: string, type: 'info' | 'warning' | 'error' = 'info'): void {
         const routeStatus = document.getElementById('route-status');
         const routeStatusDetails = document.getElementById('route-status-details');
-        if (routeStatus && routeStatusDetails) {
-            const colors = {
-                info: 'var(--amber-400)',
-                warning: '#ffca28',
-                error: '#ff6b6b'
-            };
-            routeStatusDetails.style.color = colors[type];
-            routeStatusDetails.textContent = message;
+        if (!routeStatus || !routeStatusDetails) {
+            logger.warn('Status message UI not found; dropping message', { message, type });
+            return;
+        }
 
-            if (type !== 'error') {
-                setTimeout(() => {
-                    if (routeStatusDetails.textContent === message) {
-                        routeStatusDetails.textContent = '';
-                    }
-                }, UI_CONFIG.STATUS_MESSAGE_TIMEOUT_MS);
-            }
-        } else {
-            alert(message);
+        const colors = {
+            info: 'var(--amber-400)',
+            warning: '#ffca28',
+            error: '#ff6b6b'
+        };
+        routeStatusDetails.style.color = colors[type];
+        routeStatusDetails.textContent = message;
+
+        if (type !== 'error') {
+            setTimeout(() => {
+                if (routeStatusDetails.textContent === message) {
+                    routeStatusDetails.textContent = '';
+                }
+            }, UI_CONFIG.STATUS_MESSAGE_TIMEOUT_MS);
         }
     }
 
@@ -1307,18 +1312,29 @@
         return polyline
     }
 
-    // toggleGraphVisualization is a no-op in serverless mode (debug feature removed)
-    function toggleGraphVisualization(): void {}
-
     _initMap({
         addMarker,
         addWallPolyline,
         clearRoute,
         redrawRouteForCurrentFloor,
-        toggleGraphVisualization,
         initializeNavigation,
         createTextParagraph,
     });
+
+    if (adminRequested && !isAdminEnabled) {
+        logger.warn('Admin mode requested but disabled in this build. Set PUBLIC_ENABLE_ADMIN=true to allow it.');
+        const routeStatus = document.getElementById('route-status');
+        const routeStatusDetails = document.getElementById('route-status-details');
+        const emptyState = document.getElementById('empty-state');
+        if (routeStatus && routeStatusDetails) {
+            routeStatus.style.display = 'block';
+            routeStatusDetails.style.color = '#ffca28';
+            routeStatusDetails.textContent = 'Admin mode is disabled in this deployment.';
+        } else if (emptyState) {
+            emptyState.textContent = '';
+            emptyState.appendChild(createTextParagraph('Admin mode is disabled in this deployment.', 'color: #ffca28;'));
+        }
+    }
 
     // ========== EVENT LISTENERS ==========
 
@@ -1413,11 +1429,6 @@
 
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {
-        for (const edge of state.graphEdges) {
-            state.map?.removeLayer(edge);
-        }
-        state.graphEdges = [];
-
         for (const m of state.routeMarkers) {
             if ('__isOutline' in m) {
                 state.map?.removeLayer(m.layer);

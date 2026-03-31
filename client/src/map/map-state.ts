@@ -26,17 +26,6 @@ import type { Wall, Node, SearchResult, TrafficZone } from '../utils/types'
 export type RouteLayer = L.Marker | { __isOutline: true; layer: L.Polyline }
 
 export interface MapState {
-  // Admin / debug
-
-  /** Whether the admin/debug overlay is currently enabled. */
-  isDebugMode: boolean
-  /**
-   * Currently active edit mode.
-   * One of: `'room'`, `'waypoint'`, `'bathroom'`, `'stairway'`,
-   * `'connect-stairway'`, `'wall'`, `'special'`, `'traffic-zone'`.
-   */
-  currentMode: string
-
   // Floor
 
   /**
@@ -63,6 +52,10 @@ export interface MapState {
    * Distinct from `collectedNodes`, which only holds the current floor's nodes.
    */
   allNodesAllFloors: Node[]
+  /** All traffic zones across every floor, used for graph edge-cost inflation. */
+  allTrafficZones: TrafficZone[]
+  /** `true` after cross-floor navigation data has been loaded at least once. */
+  hasLoadedGlobalNavigationData: boolean
 
   // Leaflet objects
 
@@ -103,10 +96,6 @@ export interface MapState {
    * `clearRoute` and `redrawRouteForCurrentFloor`.
    */
   routeMarkers: RouteLayer[]
-  /** Debug graph-edge polylines currently drawn on the map. */
-  graphEdges: L.Polyline[]
-  /** Whether the graph-edge debug overlay is currently visible. */
-  showingGraph: boolean
 
   // Search
 
@@ -124,16 +113,6 @@ export interface MapState {
   /** Node selected as the route destination, `null` if none. */
   selectedEndNode: Node | null
 
-  // Stairway connection (admin)
-
-  /**
-   * First stairway node selected in the two-click connect-stairway flow.
-   * `null` when no connection is in progress.
-   */
-  firstStairwayForConnection: Node | null
-
-  // Traffic zones (admin)
-
   /**
    * Traffic zones for the current floor.
    * INVARIANT: kept in the same insertion order as `trafficZoneRects` so that
@@ -146,20 +125,17 @@ export interface MapState {
    */
   trafficZoneRects: L.Rectangle[]
 
-  /** First corner set during a two-click traffic-zone draw, or `null`. */
-  trafficZoneFirstCorner: { lat: number; lng: number } | null
 }
 
 export const state: MapState = {
-  isDebugMode: false,
-  currentMode: 'room',
-
   currentFloor: '',         // set by map-init after importing FLOORS.DEFAULT
   loadedFloorImages: new Set(),
 
   collectedNodes: [],
   collectedWalls: [],
   allNodesAllFloors: [],
+  allTrafficZones: [],
+  hasLoadedGlobalNavigationData: false,
 
   nodeMarkers: {},
   wallPolylines: [],
@@ -171,8 +147,6 @@ export const state: MapState = {
   currentRoute: null,
   currentRouteFullPath: [],
   routeMarkers: [],
-  graphEdges: [],
-  showingGraph: false,
 
   searchDebounceTimer: null,
   activeDropdown: null,
@@ -180,9 +154,6 @@ export const state: MapState = {
   selectedStartNode: null,
   selectedEndNode: null,
 
-  firstStairwayForConnection: null,
-
   trafficZones: [],
   trafficZoneRects: [],
-  trafficZoneFirstCorner: null,
 }

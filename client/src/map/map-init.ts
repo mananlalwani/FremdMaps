@@ -8,7 +8,7 @@
  *     `loadAllFloorsWalls`)
  *   - Clearing and re-rendering map data (`clearMapData`, `renderMapData`)
  *
- * It deliberately does NOT import route-display or admin-editor to avoid
+ * It deliberately does NOT import route-display directly to avoid
  * circular dependencies. Instead it receives the functions it needs to call
  * back as injectable callbacks passed to `initMap`.
  */
@@ -20,10 +20,235 @@ import { MAP_CONFIG, FLOORS } from '../utils/constants'
 import { graphLogger, logger } from '../utils/logger'
 import { state } from './map-state'
 
+type JsonObject = Record<string, unknown>
+
+function isObject(value: unknown): value is JsonObject {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isNodeType(value: unknown): value is NonNullable<Node['type']> {
+  return value === 'room' || value === 'waypoint' || value === 'bathroom' || value === 'stairway'
+}
+
+function assertFiniteNumber(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite number`)
+  }
+  return value
+}
+
+function assertNonEmptyString(value: unknown, label: string): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${label} must be a non-empty string`)
+  }
+  return value
+}
+
+function assertCoordinateBounds(lat: number, lng: number, label: string): void {
+  if (lat < -MAP_CONFIG.IMAGE_HEIGHT || lat > 0) {
+    throw new Error(`${label}.lat is outside map bounds`)
+  }
+  if (lng < 0 || lng > MAP_CONFIG.IMAGE_WIDTH) {
+    throw new Error(`${label}.lng is outside map bounds`)
+  }
+}
+
+function parseNodes(value: unknown, floorId: string, contextLabel: string): Node[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${contextLabel} must be an array`)
+  }
+
+  const nodes: Node[] = []
+
+  for (let index = 0; index < value.length; index += 1) {
+    const rawNode = value[index]
+    const label = `${contextLabel}[${index}]`
+    if (!isObject(rawNode)) {
+      throw new Error(`${label} must be an object`)
+    }
+
+    const uid = assertNonEmptyString(rawNode.uid, `${label}.uid`)
+    const lat = assertFiniteNumber(rawNode.lat, `${label}.lat`)
+    const lng = assertFiniteNumber(rawNode.lng, `${label}.lng`)
+    assertCoordinateBounds(lat, lng, label)
+
+    if (!Array.isArray(rawNode.rooms) || rawNode.rooms.length === 0) {
+      throw new Error(`${label}.rooms must be a non-empty array`)
+    }
+    const rooms = rawNode.rooms.map((room, roomIndex) =>
+      assertNonEmptyString(room, `${label}.rooms[${roomIndex}]`)
+    )
+
+    const type = rawNode.type
+    if (type !== undefined && !isNodeType(type)) {
+      throw new Error(`${label}.type is invalid`)
+    }
+
+    const node: Node = { uid, lat, lng, rooms, floor: floorId }
+
+    if (type !== undefined) node.type = type
+
+    if (rawNode.connectsTo !== undefined) {
+      if (!Array.isArray(rawNode.connectsTo)) {
+        throw new Error(`${label}.connectsTo must be an array when present`)
+      }
+      node.connectsTo = rawNode.connectsTo.map((target, targetIndex) =>
+        assertNonEmptyString(target, `${label}.connectsTo[${targetIndex}]`)
+      )
+    }
+
+    if (rawNode.bathroomType !== undefined) {
+      const bathroomType = assertNonEmptyString(rawNode.bathroomType, `${label}.bathroomType`)
+      node.bathroomType = bathroomType as Node['bathroomType']
+    }
+
+    if (rawNode.category !== undefined) {
+      const category = assertNonEmptyString(rawNode.category, `${label}.category`)
+      node.category = category as Node['category']
+    }
+
+    nodes.push(node)
+  }
+
+  return nodes
+}
+
+function parseWalls(value: unknown, contextLabel: string): number[][][] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${contextLabel} must be an array`)
+  }
+
+  const walls: number[][][] = []
+
+  for (let index = 0; index < value.length; index += 1) {
+    const segment = value[index]
+    const label = `${contextLabel}[${index}]`
+    if (!Array.isArray(segment) || segment.length !== 2) {
+      throw new Error(`${label} must be a 2-point segment`)
+    }
+
+    const parsedSegment: number[][] = []
+    for (let pointIndex = 0; pointIndex < 2; pointIndex += 1) {
+      const point = segment[pointIndex]
+      if (!Array.isArray(point) || point.length !== 2) {
+        throw new Error(`${label}[${pointIndex}] must be [lat, lng]`)
+      }
+
+      const lat = assertFiniteNumber(point[0], `${label}[${pointIndex}][0]`)
+      const lng = assertFiniteNumber(point[1], `${label}[${pointIndex}][1]`)
+      assertCoordinateBounds(lat, lng, `${label}[${pointIndex}]`)
+      parsedSegment.push([lat, lng])
+    }
+
+    walls.push(parsedSegment)
+  }
+
+  return walls
+}
+
+function parseZones(value: unknown, floorId: string, contextLabel: string): TrafficZone[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${contextLabel} must be an array`)
+  }
+
+  const zones: TrafficZone[] = []
+
+  for (let index = 0; index < value.length; index += 1) {
+    const rawZone = value[index]
+    const label = `${contextLabel}[${index}]`
+    if (!isObject(rawZone)) {
+      throw new Error(`${label} must be an object`)
+    }
+
+    const uid = assertNonEmptyString(rawZone.uid, `${label}.uid`)
+    const rawFloor = assertNonEmptyString(rawZone.floor, `${label}.floor`)
+    if (rawFloor !== floorId) {
+      throw new Error(`${label}.floor must equal "${floorId}"`)
+    }
+
+    if (!isObject(rawZone.bounds)) {
+      throw new Error(`${label}.bounds must be an object`)
+    }
+
+    const minLat = assertFiniteNumber(rawZone.bounds.minLat, `${label}.bounds.minLat`)
+    const minLng = assertFiniteNumber(rawZone.bounds.minLng, `${label}.bounds.minLng`)
+    const maxLat = assertFiniteNumber(rawZone.bounds.maxLat, `${label}.bounds.maxLat`)
+    const maxLng = assertFiniteNumber(rawZone.bounds.maxLng, `${label}.bounds.maxLng`)
+
+    if (minLat > maxLat || minLng > maxLng) {
+      throw new Error(`${label}.bounds must satisfy min <= max`)
+    }
+
+    assertCoordinateBounds(minLat, minLng, `${label}.bounds.min`)
+    assertCoordinateBounds(maxLat, maxLng, `${label}.bounds.max`)
+
+    let intensity: number
+    if (typeof rawZone.intensity === 'number' && Number.isFinite(rawZone.intensity)) {
+      intensity = rawZone.intensity
+    } else {
+      throw new Error(`${label}.intensity must be a finite number`)
+    }
+
+    if (intensity < 1 || intensity > 10) {
+      throw new Error(`${label}.intensity must be in range [1, 10]`)
+    }
+
+    zones.push({
+      uid,
+      floor: floorId,
+      intensity,
+      bounds: { minLat, minLng, maxLat, maxLng },
+    })
+  }
+
+  return zones
+}
+
+async function loadAllFloorsZones(): Promise<TrafficZone[]> {
+  try {
+    const perFloor = await Promise.all(
+      FLOORS.AVAILABLE.map(async floor => {
+        const res = await fetch(`/data/floor${floor.id}/zones.json`)
+        if (!res.ok) return []
+        const rawZones: unknown = await res.json()
+        const floorZones = parseZones(rawZones, floor.id, `floor${floor.id}/zones.json`)
+        graphLogger.log(`Loaded ${floorZones.length} traffic zones from Floor ${floor.id}`)
+        return floorZones
+      })
+    )
+
+    const allZones = perFloor.flat()
+    graphLogger.log(`Total traffic zones across all floors: ${allZones.length}`)
+    return allZones
+  } catch (err) {
+    logger.error('Failed to load zones from all floors:', err)
+    return []
+  }
+}
+
+async function loadAllFloorsNavigationData(): Promise<void> {
+  const [allNodes, allWalls, allZones] = await Promise.all([
+    loadAllNodesAllFloors(),
+    loadAllFloorsWalls(),
+    loadAllFloorsZones(),
+  ])
+
+  if (allNodes.length === 0) {
+    logger.warn('Global navigation data is incomplete; keeping per-floor fallback only')
+    return
+  }
+
+  state.allNodesAllFloors = allNodes
+  state.wallObjects = allWalls
+  state.allTrafficZones = allZones
+  state.hasLoadedGlobalNavigationData = true
+  graphLogger.info('Cached global navigation data for all floors')
+}
+
 // Callbacks injected from the orchestrator (Map.astro)
 /**
- * Callbacks injected by Map.astro to break circular imports between `map-init`,
- * `admin-editor`, and `route-display`.
+ * Callbacks injected by Map.astro to break circular imports between `map-init`
+ * and `route-display`.
  */
 export interface MapInitCallbacks {
   /** Place (or replace) a Leaflet marker for a node on the current floor. */
@@ -34,8 +259,6 @@ export interface MapInitCallbacks {
   clearRoute: () => void
   /** Re-render the stored multi-floor route for the newly active floor. */
   redrawRouteForCurrentFloor: () => void
-  /** Toggle the debug graph-edge overlay on/off. */
-  toggleGraphVisualization: () => void
   /** Rebuild the visibility graph and A* cache after data changes. */
   initializeNavigation: () => Promise<void>
   /** Create a styled `<p>` element (used for error messages in the empty-state panel). */
@@ -158,10 +381,6 @@ export function switchFloor(floorId: string): void {
     _cb.clearRoute()
   }
 
-  if (state.showingGraph) {
-    _cb.toggleGraphVisualization()
-  }
-
   const floorLabel = document.querySelector('.floor-label')
   if (floorLabel) floorLabel.textContent = `Floor ${floorId}`
 
@@ -218,8 +437,7 @@ export function renderMapData(): void {
  * Sequence:
  * 1. `clearMapData` — remove current markers and polylines from the Leaflet map.
  * 2. Fetch `/data/floor<N>/nodes.json` and `/data/floor<N>/walls.json`.
- * 3. Fetch `/data/floor<N>/zones.json`; coerce any legacy `severity` string
- *    fields to numeric `intensity` values.
+ * 3. Fetch `/data/floor<N>/zones.json`.
  * 4. `renderMapData` — add markers and wall polylines for the new floor.
  * 5. `loadAllNodesAllFloors` + `loadAllFloorsWalls` — refresh the cross-floor
  *    node/wall pools used by the visibility-graph builder.
@@ -236,13 +454,15 @@ export async function loadData(): Promise<void> {
     if (!nodesRes.ok) {
       throw new Error(`Failed to load nodes: ${nodesRes.status} ${nodesRes.statusText}`)
     }
-    state.collectedNodes = await nodesRes.json()
+    const rawNodes: unknown = await nodesRes.json()
+    state.collectedNodes = parseNodes(rawNodes, state.currentFloor, `floor${state.currentFloor}/nodes.json`)
 
     const wallsRes = await fetch(`/data/floor${state.currentFloor}/walls.json`)
     if (!wallsRes.ok) {
       throw new Error(`Failed to load walls: ${wallsRes.status} ${wallsRes.statusText}`)
     }
-    state.collectedWalls = await wallsRes.json()
+    const rawWalls: unknown = await wallsRes.json()
+    state.collectedWalls = parseWalls(rawWalls, `floor${state.currentFloor}/walls.json`)
 
     // Remove old traffic zone rects from the map before reloading
     for (const rect of state.trafficZoneRects) {
@@ -253,20 +473,8 @@ export async function loadData(): Promise<void> {
 
     const zonesRes = await fetch(`/data/floor${state.currentFloor}/zones.json`)
     if (zonesRes.ok) {
-      const raw: unknown[] = await zonesRes.json()
-      const zones: TrafficZone[] = raw.map((z: unknown) => {
-        const zone = z as Record<string, unknown>
-        // Legacy zone data (before the intensity redesign) stored congestion as a
-        // string `severity` field (`'low'`, `'medium'`, `'high'`) rather than the
-        // numeric `intensity` multiplier.  Coerce on read so old data files keep
-        // working without a migration step.
-        if (typeof zone.intensity !== 'number' && typeof zone.severity === 'string') {
-          const legacyMap: Record<string, number> = { low: 1.5, medium: 3.0, high: 8.0 }
-          zone.intensity = legacyMap[zone.severity as string] ?? 1.5
-          delete zone.severity
-        }
-        return zone as unknown as TrafficZone
-      })
+      const rawZones: unknown = await zonesRes.json()
+      const zones = parseZones(rawZones, state.currentFloor, `floor${state.currentFloor}/zones.json`)
       state.trafficZones = zones
       graphLogger.log(`Loaded ${zones.length} traffic zones for floor ${state.currentFloor}`)
     } else {
@@ -275,9 +483,20 @@ export async function loadData(): Promise<void> {
 
     renderMapData()
 
-    await loadAllNodesAllFloors()
-    const allWalls = await loadAllFloorsWalls()
-    state.wallObjects = allWalls
+    if (!state.hasLoadedGlobalNavigationData) {
+      await loadAllFloorsNavigationData()
+    }
+
+    if (!state.hasLoadedGlobalNavigationData) {
+      state.allNodesAllFloors = state.collectedNodes
+      const fallbackWalls = convertWallData(state.collectedWalls)
+      fallbackWalls.forEach(wall => {
+        wall.floor = state.currentFloor
+      })
+      state.wallObjects = fallbackWalls
+      state.allTrafficZones = state.trafficZones
+    }
+
     await _cb.initializeNavigation()
   } catch (err) {
     logger.error('Failed to load data:', err)
@@ -304,8 +523,8 @@ export async function loadAllNodesAllFloors(): Promise<Node[]> {
       FLOORS.AVAILABLE.map(async floor => {
         const res = await fetch(`/data/floor${floor.id}/nodes.json`)
         if (!res.ok) return []
-        const floorNodes: Node[] = await res.json()
-        for (const node of floorNodes) { node.floor = floor.id }
+         const rawNodes: unknown = await res.json()
+         const floorNodes = parseNodes(rawNodes, floor.id, `floor${floor.id}/nodes.json`)
         graphLogger.log(`Loaded ${floorNodes.length} nodes from Floor ${floor.id}`)
         return floorNodes
       })
@@ -331,7 +550,8 @@ export async function loadAllFloorsWalls(): Promise<Wall[]> {
       FLOORS.AVAILABLE.map(async floor => {
         const res = await fetch(`/data/floor${floor.id}/walls.json`)
         if (!res.ok) return []
-        const floorWallsRaw: number[][][] = await res.json()
+        const rawWalls: unknown = await res.json()
+        const floorWallsRaw = parseWalls(rawWalls, `floor${floor.id}/walls.json`)
         const floorWalls = convertWallData(floorWallsRaw)
         floorWalls.forEach(wall => { wall.floor = floor.id })
         graphLogger.log(`Loaded ${floorWalls.length} walls from Floor ${floor.id}`)

@@ -9,6 +9,7 @@
 
 ```bash
 pnpm --filter client dev      # dev server → localhost:4321
+pnpm run validate:data        # validate floor data JSON shape and required fields
 pnpm --filter client build    # production build — must produce zero errors
 pnpm --filter client preview  # preview production build locally
 
@@ -42,7 +43,7 @@ client/public/
 
 There is **no backend server**. All navigation data is served as static JSON from `client/public/data/`. Routing and pathfinding run entirely client-side.
 
-**Admin mode**: `?admin` in URL (`urlParams.has('admin')`). Admin edits are session-only — there is no persistence mechanism without a server. Floor 2 is default.
+**Admin mode**: `?admin` is enabled in development. In production, set `PUBLIC_ENABLE_ADMIN=true` to allow it. Admin edits are session-only — there is no persistence mechanism without a server. Floor 2 is default.
 
 ## Data Files
 

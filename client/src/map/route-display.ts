@@ -27,6 +27,15 @@ export interface RouteDisplayCallbacks {
 
 let _cb: RouteDisplayCallbacks
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 /**
  * Inject the callbacks from the Map.astro orchestrator.
  * Must be called once before `displayRoute` is invoked.
@@ -241,9 +250,10 @@ export function redrawRouteForCurrentFloor(): void {
       const targetFloor = neighbor?.floor
 
       const label = targetFloor ? `Floor ${targetFloor}` : ''
+      const safeLabel = label ? escapeHtml(label) : ''
       const stairIcon = L.divIcon({
         className: 'route-marker stairway',
-        html: `<div style="background: #9C27B0; color: white; min-width: 28px; height: 28px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; font-family: 'Plus Jakarta Sans', sans-serif; border: 2px solid white; box-shadow: 0 0 12px rgba(156,39,176,0.5); padding: 0 8px; gap: 4px; white-space: nowrap; cursor: pointer;">&#x1FA9C;${label ? ' &rarr; ' + label : ''}</div>`,
+        html: `<div style="background: #9C27B0; color: white; min-width: 28px; height: 28px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; font-family: 'Plus Jakarta Sans', sans-serif; border: 2px solid white; box-shadow: 0 0 12px rgba(156,39,176,0.5); padding: 0 8px; gap: 4px; white-space: nowrap; cursor: pointer;">&#x1FA9C;${safeLabel ? ' &rarr; ' + safeLabel : ''}</div>`,
         iconSize: [label ? 110 : 32, 28],
         iconAnchor: [label ? 55 : 16, 14],
       })

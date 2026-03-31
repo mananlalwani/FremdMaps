@@ -3,7 +3,8 @@
     "private": true,
     "scripts": {
         "dev": "pnpm --filter client dev",
-        "build": "pnpm --filter client build",
+        "validate:data": "node scripts/validate-data.mjs",
+        "build": "pnpm run validate:data && pnpm --filter client build",
         "test": "pnpm --filter client test",
         "deploy": "pnpm run build && wrangler deploy",
         "preview": "pnpm run build && wrangler dev"
