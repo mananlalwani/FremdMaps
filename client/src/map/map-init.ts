@@ -314,9 +314,13 @@ export function initMap(callbacks: MapInitCallbacks): void {
     // handler, which conflicts with iOS Safari's touch processing and causes
     // ghost clicks on first interaction.
     tap: false,
-    // inertia: true (default) — restores kinetic map panning on mobile so the
-    // map feels natural rather than rigid.
-    maxBoundsViscosity: 1.0,
+    // Keep panning responsive on lower-end mobile devices by reducing runtime
+    // animation/transform work during drag/zoom.
+    zoomAnimation: false,
+    fadeAnimation: false,
+    markerZoomAnimation: false,
+    inertia: false,
+    maxBoundsViscosity: 0.7,
     doubleClickZoom: false,
   })
   state.map = leafletMap
