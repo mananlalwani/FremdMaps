@@ -266,6 +266,14 @@ export function redrawRouteForCurrentFloor(): void {
   const allVisibleCoords = segments.flat().map(n => [n.lat, n.lng] as [number, number])
   if (allVisibleCoords.length > 0) {
     state.map.fitBounds(L.latLngBounds(allVisibleCoords), { padding: [100, 100] })
+
+    const routeStart = path[0]
+    if (routeStart?.floor === state.currentFloor) {
+      const zoomedStart = Math.min(state.map.getZoom() + 0.6, MAP_CONFIG.MAX_ZOOM)
+      state.map.flyTo([routeStart.lat, routeStart.lng], zoomedStart, {
+        duration: 0.3,
+      })
+    }
   }
 
   generateDirections(state.currentRouteFullPath, state.currentFloor)
