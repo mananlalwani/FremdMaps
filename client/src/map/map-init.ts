@@ -305,6 +305,7 @@ export function initMap(callbacks: MapInitCallbacks): void {
     crs: L.CRS.Simple,
     minZoom: MIN_ZOOM,
     maxZoom: MAX_ZOOM,
+    zoomControl: false,
     preferCanvas: true,
     // tap: false — use Leaflet's pointer-events path instead of the legacy tap
     // handler, which conflicts with iOS Safari's touch processing and causes
