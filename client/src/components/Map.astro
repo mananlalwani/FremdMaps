@@ -1557,6 +1557,23 @@
     window.addEventListener('resize', updateQuickNavButton);
     updateQuickNavButton();
 
+    // iOS virtual keyboard: shift the bottom panel up so inputs stay visible
+    if ('visualViewport' in window && window.visualViewport) {
+        const vv = window.visualViewport;
+        const onVVResize = () => {
+            if (!navPanel || window.innerWidth >= 768) {
+                if (navPanel) navPanel.style.bottom = '';
+                return;
+            }
+            // On iOS, innerHeight stays fixed while vv.height shrinks when keyboard opens.
+            // offsetTop accounts for any visual-viewport scroll offset.
+            const keyboardHeight = window.innerHeight - (vv.height + vv.offsetTop);
+            navPanel.style.bottom = keyboardHeight > 50 ? `${keyboardHeight}px` : '';
+        };
+        vv.addEventListener('resize', onVVResize);
+        vv.addEventListener('scroll', onVVResize);
+    }
+
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {
         for (const edge of state.graphEdges) {
