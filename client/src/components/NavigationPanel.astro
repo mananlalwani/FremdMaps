@@ -277,6 +277,7 @@
     background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0);
     background-size: 24px 24px;
     background-color: var(--panel-bg);
+    contain: layout paint style;
   }
   
   #nav-panel.panel-expanded {
@@ -527,6 +528,16 @@
       0 0 0 3px var(--amber-glow),
       0 2px 8px rgba(0,0,0,0.15);
     background: var(--panel-elevated);
+  }
+
+  @media (max-width: 767px) {
+    #nav-panel {
+      scroll-padding-bottom: 160px;
+    }
+
+    .input-group input {
+      font-size: 16px;
+    }
   }
   
   .button-group {

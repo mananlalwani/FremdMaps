@@ -14,49 +14,14 @@
     </button>
 </div>
 
-<!-- Quick Nav Button (Mobile - shows when panel minimized) -->
-<button id="quick-nav-btn" style="display: none;">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="10" r="3"></circle>
-        <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"></path>
-    </svg>
-    Navigate
-</button>
-
-
-<!-- Debug UI - Only visible with ?admin=true URL parameter -->
-<div id="debug-ui" style="display: none;">
-    <button id="toggle-debug">Enable Debug Mode</button>
-    <div
-        id="debug-controls"
-        style="display: none; flex-direction: column; gap: 5px;"
-    >
-        <button id="mode-room" class="active-mode">Add Room Node</button>
-        <button id="mode-waypoint">Add Waypoint</button>
-        <button id="mode-bathroom">Add Bathroom</button>
-        <button id="mode-stairway">Add Stairway</button>
-        <button id="mode-connect-stairway">Connect Stairways</button>
-        <button id="mode-special">Add Special Place</button>
-        <button id="mode-wall">Add Walls</button>
-        <button id="mode-traffic-zone">Add Traffic Zone</button>
-        <button id="toggle-graph">Show Graph</button>
-        <button id="save-data">Save Data</button>
-        <div
-            id="stats-display"
-            style="background: var(--panel-surface); padding: 10px 12px; border-radius: var(--radius-md); font-size: 11px; color: var(--text-secondary); border: 1px solid var(--panel-border); font-family: var(--font-mono);"
-        >
-            Nodes: <span id="node-count">0</span><br />
-            Walls: <span id="wall-count">0</span>
-        </div>
-    </div>
-</div>
-
 <script>
     import "leaflet/dist/leaflet.css";
-    import { findNodeByRoom } from "../utils/pathfinding";
-    import type { Node, SearchResult, ScheduleEntry } from "../utils/types";
-    import { MAP_CONFIG, API_CONFIG, UI_CONFIG } from "../utils/constants";
+    import L from "leaflet";
+    import { findNodeByRoom, findPath, findNearestBathroom } from "../utils/pathfinding";
+    import type { Node, SearchResult, ScheduleEntry, Graph } from "../utils/types";
+    import { MAP_CONFIG, UI_CONFIG } from "../utils/constants";
     import { logger, graphLogger, searchLogger, routeLogger } from "../utils/logger";
+    import { buildVisibilityGraph } from "../utils/graph";
 
     // Search utilities
     import {
@@ -90,16 +55,17 @@
         redrawRouteForCurrentFloor,
         clearRoute
     } from "../map/route-display";
-    import {
-        setAdminEditorCallbacks,
-        onMapClick,
-        onMapDoubleClick,
-        addMarker,
-        addWallPolyline,
-        toggleGraphVisualization,
-        setupDebugToggle,
-        setMode
-    } from "../map/admin-editor";
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const adminRequested = urlParams.has('admin');
+    const isAdminEnabled = import.meta.env.DEV || import.meta.env.PUBLIC_ENABLE_ADMIN === 'true';
+
+    // ========== GRAPH STATE ==========
+
+    /** Visibility graph built by initializeNavigation; used by handleFindRoute and handleFindNearestBathroom. */
+    let _graph: Graph | null = null
+    let _graphCacheKey = ''
+    let _searchEnhancementsInitialized = false
 
     // ========== SAFE DOM HELPERS (XSS Prevention) ==========
 
@@ -283,12 +249,9 @@
 
     /**
      * Called by map-init after floor data finishes loading.
-     * Invalidates the search cache (nodes may have changed), initialises the
-     * search/recent/favourites UI, clears the empty-state placeholder, and
-     * enables the navigation action buttons.
-     *
-     * Route computation is fully server-side — this function does NOT build
-     * a local graph; it just signals that the UI is ready to accept input.
+     * Builds the client-side visibility graph, invalidates the search cache,
+     * initialises the search/recent/favourites UI, clears the empty-state
+     * placeholder, and enables the navigation action buttons.
      */
     async function initializeNavigation(): Promise<void> {
         if (state.allNodesAllFloors.length < 2) {
@@ -296,10 +259,30 @@
             return;
         }
 
-        graphLogger.log('Navigation ready (pathfinding handled server-side)');
+        const graphCacheKey = `${state.allNodesAllFloors.length}:${state.wallObjects.length}:${state.allTrafficZones.length}`;
 
-        invalidateSearchCache();
-        initializeSearchEnhancements();
+        if (!_graph || _graphCacheKey !== graphCacheKey) {
+            graphLogger.log('Building visibility graph client-side...');
+            _graph = buildVisibilityGraph(
+                state.allNodesAllFloors,
+                state.wallObjects,
+                MAP_CONFIG.MAX_HALLWAY_DISTANCE,
+                state.allTrafficZones
+            );
+            _graphCacheKey = graphCacheKey;
+            graphLogger.log('Visibility graph built.');
+            invalidateSearchCache();
+        } else {
+            graphLogger.log('Reusing cached visibility graph.');
+        }
+
+        if (!_searchEnhancementsInitialized) {
+            initializeSearchEnhancements();
+            _searchEnhancementsInitialized = true;
+        } else {
+            updateRecentSearchesUI();
+            updateFavoritesUI();
+        }
 
         const emptyState = document.getElementById('empty-state');
         if (emptyState) {
@@ -331,7 +314,7 @@
      *
      * - `info` / `warning` messages auto-clear after `UI_CONFIG.STATUS_MESSAGE_TIMEOUT_MS`.
      * - `error` messages persist until overwritten.
-     * - Falls back to `alert()` if the status element is not in the DOM.
+     * - If route-status UI is missing, logs a warning and returns (no blocking dialogs).
      *
      * @param message - Text to show the user
      * @param type    - Severity level; controls colour and auto-clear behaviour
@@ -339,40 +322,26 @@
     function showStatusMessage(message: string, type: 'info' | 'warning' | 'error' = 'info'): void {
         const routeStatus = document.getElementById('route-status');
         const routeStatusDetails = document.getElementById('route-status-details');
-        if (routeStatus && routeStatusDetails) {
-            const colors = {
-                info: 'var(--amber-400)',
-                warning: '#ffca28',
-                error: '#ff6b6b'
-            };
-            routeStatusDetails.style.color = colors[type];
-            routeStatusDetails.textContent = message;
-
-            if (type !== 'error') {
-                setTimeout(() => {
-                    if (routeStatusDetails.textContent === message) {
-                        routeStatusDetails.textContent = '';
-                    }
-                }, UI_CONFIG.STATUS_MESSAGE_TIMEOUT_MS);
-            }
-        } else {
-            alert(message);
+        if (!routeStatus || !routeStatusDetails) {
+            logger.warn('Status message UI not found; dropping message', { message, type });
+            return;
         }
-    }
 
-    /**
-     * Refresh the admin-mode debug stats panel (`#node-count`, `#wall-count`)
-     * with the current counts from the shared `state` object.
-     *
-     * Called by map-init and admin-editor after any data mutation so the
-     * counters stay in sync without a full page reload.
-     */
-    function updateUI(): void {
-        const nodeCountSpan = document.getElementById('node-count');
-        const wallCountSpan = document.getElementById('wall-count');
+        const colors = {
+            info: 'var(--amber-400)',
+            warning: '#ffca28',
+            error: '#ff6b6b'
+        };
+        routeStatusDetails.style.color = colors[type];
+        routeStatusDetails.textContent = message;
 
-        if (nodeCountSpan) nodeCountSpan.textContent = String(state.collectedNodes.length);
-        if (wallCountSpan) wallCountSpan.textContent = String(state.collectedWalls.length);
+        if (type !== 'error') {
+            setTimeout(() => {
+                if (routeStatusDetails.textContent === message) {
+                    routeStatusDetails.textContent = '';
+                }
+            }, UI_CONFIG.STATUS_MESSAGE_TIMEOUT_MS);
+        }
     }
 
     // ========== SEARCH ENHANCEMENTS ==========
@@ -944,14 +913,14 @@
      *
      * For each consecutive pair of filled schedule entries (P1→P2, P2→P3, …):
      * - Looks up the `Node` for each room name.
-     * - POSTs to `GET /api/route?from=<uid>&to=<uid>` to get the route.
+     * - Computes the route client-side using `findPath` over the visibility graph.
      * - Renders a card showing the period label, room names, and route metadata
      *   (floor info for single-floor routes, "Multi-floor route" otherwise).
      * - Clicking a card closes the modal and renders the route on the map via
      *   `displayRoute`.
      *
      * Shows guidance messages when fewer than 2 rooms are configured.
-     * Handles network errors and missing nodes gracefully with inline error text.
+     * Handles missing nodes and graph-not-ready cases gracefully.
      */
     async function renderAllPaths(): Promise<void> {
         const list = document.getElementById('schedule-paths-list');
@@ -977,8 +946,6 @@
             list.appendChild(msg);
             return;
         }
-
-        const apiUrl = (import.meta as { env: Record<string, string> }).env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL;
 
         // Build consecutive pairs: P1→P2, P2→P3, …
         for (let i = 0; i < filled.length - 1; i++) {
@@ -1018,38 +985,32 @@
                 continue;
             }
 
-            // Fetch route and add meta / click handler
-            try {
-                const res = await fetch(`${apiUrl}/api/route?from=${encodeURIComponent(fromNode.uid)}&to=${encodeURIComponent(toNode.uid)}`);
-                if (res.ok) {
-                    const result = await res.json() as { path: Node[]; distance: number; found: boolean };
-                    const meta = document.createElement('div');
-                    meta.className = 'schedule-path-meta';
-                    if (result.found) {
-                        const floors = [...new Set(result.path.map((n: Node) => n.floor).filter(Boolean))];
-                        meta.textContent = floors.length > 1
-                            ? `Multi-floor route (${floors.join(', ')})`
-                            : `Floor ${floors[0] || '?'}`;
-                        item.addEventListener('click', () => {
-                            closeScheduleModal();
-                            displayRoute(result.path, result.distance);
-                        });
-                    } else {
-                        meta.textContent = 'No path found';
-                    }
-                    item.appendChild(meta);
-                } else {
-                    const meta = document.createElement('div');
-                    meta.className = 'schedule-path-notfound';
-                    meta.textContent = 'Route error';
-                    item.appendChild(meta);
-                }
-            } catch {
+            if (!_graph) {
                 const meta = document.createElement('div');
                 meta.className = 'schedule-path-notfound';
-                meta.textContent = 'Server unreachable';
+                meta.textContent = 'Graph not ready';
                 item.appendChild(meta);
+                list.appendChild(item);
+                continue;
             }
+
+            // Compute route client-side
+            const result = findPath(fromNode.uid, toNode.uid, state.allNodesAllFloors, _graph);
+            const meta = document.createElement('div');
+            meta.className = 'schedule-path-meta';
+            if (result.found) {
+                const floors = [...new Set(result.path.map((n: Node) => n.floor).filter(Boolean))];
+                meta.textContent = floors.length > 1
+                    ? `Multi-floor route (${floors.join(', ')})`
+                    : `Floor ${floors[0] || '?'}`;
+                item.addEventListener('click', () => {
+                    closeScheduleModal();
+                    displayRoute(result.path, result.distance);
+                });
+            } else {
+                meta.textContent = 'No path found';
+            }
+            item.appendChild(meta);
 
             list.appendChild(item);
         }
@@ -1164,7 +1125,7 @@
 
     /**
      * Handle the "Navigate" button click — resolve both inputs to nodes and
-     * fetch a route from the server.
+     * compute a route client-side using A* over the pre-built visibility graph.
      *
      * Resolution order for each input:
      *   1. Already-selected node stored in `state.selectedStartNode` / `state.selectedEndNode`
@@ -1173,11 +1134,8 @@
      *   4. Top Fuse.js result if its score is below `SEARCH_CONFIG.FUZZY_THRESHOLD`
      *
      * If resolution fails for either input, shows an error via `showStatusMessage`.
-     * On success, calls `displayRoute` with the server-returned path.
+     * On success, calls `displayRoute` with the computed path.
      * Adds the search pair to recent history and updates the recent UI.
-     *
-     * The button is disabled with "Calculating…" text while the request is in
-     * flight and re-enabled in the `finally` block.
      */
     async function handleFindRoute(): Promise<void> {
         const startInput = document.getElementById('start-input') as HTMLInputElement;
@@ -1222,6 +1180,11 @@
             return;
         }
 
+        if (!_graph) {
+            showStatusMessage('Navigation graph not ready yet. Please wait a moment.', 'warning');
+            return;
+        }
+
         const findRouteBtn = document.getElementById('find-route-btn');
         const originalBtnText = findRouteBtn?.textContent || '';
         if (findRouteBtn) {
@@ -1231,16 +1194,7 @@
 
         try {
             routeLogger.log(`Finding path from ${startRoom} to ${endRoom}...`);
-            const apiUrl = (import.meta as { env: Record<string, string> }).env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL;
-            const res = await fetch(`${apiUrl}/api/route?from=${encodeURIComponent(startNode.uid)}&to=${encodeURIComponent(endNode.uid)}`);
-
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({ error: res.statusText }));
-                showStatusMessage(err.error || 'Server error finding route', 'error');
-                return;
-            }
-
-            const result = await res.json() as { path: Node[]; distance: number; found: boolean };
+            const result = findPath(startNode.uid, endNode.uid, state.allNodesAllFloors, _graph);
 
             if (!result.found) {
                 showStatusMessage('No path found between these locations. They may be on different floors or blocked by walls.', 'error');
@@ -1252,9 +1206,10 @@
 
             routeLogger.log('Path found:', result);
             displayRoute(result.path, result.distance);
+            collapsePanelForRoute();
         } catch (err) {
-            logger.error('Route fetch failed:', err);
-            showStatusMessage('Could not reach navigation server. Is it running?', 'error');
+            logger.error('Route calculation failed:', err);
+            showStatusMessage('Route calculation failed. Please try again.', 'error');
         } finally {
             if (findRouteBtn) {
                 findRouteBtn.textContent = originalBtnText;
@@ -1267,13 +1222,12 @@
      * Handle the "Find Nearest Bathroom" button click.
      *
      * Resolves the start-input text to a node (requires the field to be
-     * non-empty; shows a warning otherwise), then calls
-     * `GET /api/route/bathroom?from=<uid>`.
+     * non-empty; shows a warning otherwise), then runs client-side Dijkstra
+     * via `findNearestBathroom` to find the nearest bathroom and calls
+     * `findPath` to compute the full route.
      *
      * On success, calls `displayRoute` with the bathroom path.
-     * Handles 404 (no bathrooms in data) and network errors gracefully.
-     *
-     * The button text changes to "Finding…" while the request is in flight.
+     * Handles no-bathrooms-in-data and graph-not-ready cases gracefully.
      */
     async function handleFindNearestBathroom(): Promise<void> {
         const startInput = document.getElementById('start-input') as HTMLInputElement;
@@ -1295,6 +1249,11 @@
             return;
         }
 
+        if (!_graph) {
+            showStatusMessage('Navigation graph not ready yet. Please wait a moment.', 'warning');
+            return;
+        }
+
         const bathroomBtn = document.getElementById('find-bathroom-btn');
         const originalBtnText = bathroomBtn?.textContent || '';
         if (bathroomBtn) {
@@ -1304,21 +1263,14 @@
 
         try {
             routeLogger.log(`Finding nearest bathroom from ${startRoom}...`);
-            const apiUrl = (import.meta as { env: Record<string, string> }).env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL;
-            const res = await fetch(`${apiUrl}/api/route/bathroom?from=${encodeURIComponent(startNode.uid)}`);
+            const bathroomNode = findNearestBathroom(startNode, state.allNodesAllFloors, _graph);
 
-            if (res.status === 404) {
+            if (!bathroomNode) {
                 showStatusMessage('No bathrooms found', 'error');
                 return;
             }
 
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({ error: res.statusText }));
-                showStatusMessage(err.error || 'Server error finding bathroom', 'error');
-                return;
-            }
-
-            const result = await res.json() as { path: Node[]; distance: number; found: boolean };
+            const result = findPath(startNode.uid, bathroomNode.uid, state.allNodesAllFloors, _graph);
 
             if (!result.found) {
                 showStatusMessage('Could not find a path to the nearest bathroom. It may be blocked by walls.', 'error');
@@ -1327,9 +1279,10 @@
 
             routeLogger.log('Path to bathroom found:', result);
             displayRoute(result.path, result.distance);
+            collapsePanelForRoute();
         } catch (err) {
-            logger.error('Bathroom fetch failed:', err);
-            showStatusMessage('Could not reach navigation server. Is it running?', 'error');
+            logger.error('Bathroom calculation failed:', err);
+            showStatusMessage('Bathroom route calculation failed. Please try again.', 'error');
         } finally {
             if (bathroomBtn) {
                 bathroomBtn.textContent = originalBtnText;
@@ -1338,104 +1291,31 @@
         }
     }
 
-    // ========== ADMIN SAVE ==========
-
-    /**
-     * Attach the click listener to the `#save-data` admin button.
-     *
-     * On click, POSTs the current floor's nodes, walls, and traffic zones to
-     * the server via the configured API endpoints:
-     * - `POST /api/nodes?floor=<n>` — if `state.collectedNodes` is non-empty
-     * - `POST /api/walls?floor=<n>` — if `state.collectedWalls` is non-empty
-     * - `POST /api/zones?floor=<n>` — always (even empty array, to clear saved zones)
-     *
-     * Alerts on success or shows the error message on failure.
-     * Called once during startup; only relevant in admin (`?admin`) mode.
-     */
-    function setupSaveButton(): void {
-        const saveBtn = document.getElementById('save-data');
-        if (!saveBtn) return;
-
-        saveBtn.addEventListener('click', async () => {
-            try {
-                const apiUrl = (import.meta as { env: Record<string, string> }).env.PUBLIC_API_URL || API_CONFIG.DEFAULT_URL;
-
-                if (state.collectedNodes.length > 0) {
-                    const nodesRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.NODES}?floor=${state.currentFloor}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(state.collectedNodes),
-                    });
-
-                    if (!nodesRes.ok) {
-                        const errorData = await nodesRes.json().catch(() => ({ message: 'Unknown error' }));
-                        throw new Error(`Failed to save nodes: ${errorData.message || nodesRes.statusText}`);
-                    }
-                }
-
-                if (state.collectedWalls.length > 0) {
-                    const wallsRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.WALLS}?floor=${state.currentFloor}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(state.collectedWalls),
-                    });
-
-                    if (!wallsRes.ok) {
-                        const errorData = await wallsRes.json().catch(() => ({ message: 'Unknown error' }));
-                        throw new Error(`Failed to save walls: ${errorData.message || wallsRes.statusText}`);
-                    }
-                }
-
-                // Always POST zones (even empty array, to clear previously saved zones)
-                logger.log('Saving zones payload:', JSON.stringify(state.trafficZones));
-                const zonesRes = await fetch(`${apiUrl}${API_CONFIG.ENDPOINTS.ZONES}?floor=${state.currentFloor}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(state.trafficZones),
-                });
-
-                if (!zonesRes.ok) {
-                    const errorData = await zonesRes.json().catch(() => ({ message: 'Unknown error' }));
-                    logger.error('Zones save error response:', errorData);
-                    const detail = errorData.errors
-                        ? JSON.stringify(errorData.errors)
-                        : (errorData.message || zonesRes.statusText);
-                    throw new Error(`Failed to save zones: ${detail}`);
-                }
-
-                alert(`Data saved successfully for Floor ${state.currentFloor}!`);
-            } catch (err) {
-                logger.error('Error saving data:', err);
-                alert(`Error saving data: ${err instanceof Error ? err.message : 'Unknown error'}`);
-            }
-        });
-    }
-
     // ========== WIRE UP CALLBACKS ==========
 
     setRouteDisplayCallbacks({ switchFloor });
 
-    setAdminEditorCallbacks({
-        initializeNavigation,
-        toggleGraphVisualization,
-        updateUI,
-        showStatusMessage,
-    });
-
     _initMap({
-        addMarker,
-        addWallPolyline,
         clearRoute,
         redrawRouteForCurrentFloor,
-        toggleGraphVisualization,
         initializeNavigation,
-        updateUI,
         createTextParagraph,
     });
 
-    // Wire map click events (map-init registers them via state.map)
-    state.map!.on('click', onMapClick);
-    state.map!.on('dblclick', onMapDoubleClick);
+    if (adminRequested && !isAdminEnabled) {
+        logger.warn('Admin mode requested but disabled in this build. Set PUBLIC_ENABLE_ADMIN=true to allow it.');
+        const routeStatus = document.getElementById('route-status');
+        const routeStatusDetails = document.getElementById('route-status-details');
+        const emptyState = document.getElementById('empty-state');
+        if (routeStatus && routeStatusDetails) {
+            routeStatus.style.display = 'block';
+            routeStatusDetails.style.color = '#ffca28';
+            routeStatusDetails.textContent = 'Admin mode is disabled in this deployment.';
+        } else if (emptyState) {
+            emptyState.textContent = '';
+            emptyState.appendChild(createTextParagraph('Admin mode is disabled in this deployment.', 'color: #ffca28;'));
+        }
+    }
 
     // ========== EVENT LISTENERS ==========
 
@@ -1448,33 +1328,6 @@
     if (clearRouteBtn) clearRouteBtn.addEventListener('click', clearRoute);
     if (findBathroomBtn) findBathroomBtn.addEventListener('click', handleFindNearestBathroom);
 
-    // Admin mode buttons
-    const modeRoomBtn = document.getElementById('mode-room');
-    const modeWaypointBtn = document.getElementById('mode-waypoint');
-    const modeBathroomBtn = document.getElementById('mode-bathroom');
-    const modeStairwayBtn = document.getElementById('mode-stairway');
-    const modeConnectStairwayBtn = document.getElementById('mode-connect-stairway');
-    const modeSpecialBtn = document.getElementById('mode-special');
-    const modeWallBtn = document.getElementById('mode-wall');
-    const toggleGraphBtn = document.getElementById('toggle-graph');
-
-    if (modeRoomBtn) modeRoomBtn.addEventListener('click', () => setMode('room'));
-    if (modeWaypointBtn) modeWaypointBtn.addEventListener('click', () => setMode('waypoint'));
-    if (modeBathroomBtn) modeBathroomBtn.addEventListener('click', () => setMode('bathroom'));
-    if (modeStairwayBtn) modeStairwayBtn.addEventListener('click', () => setMode('stairway'));
-    if (modeConnectStairwayBtn) modeConnectStairwayBtn.addEventListener('click', () => {
-        graphLogger.log('Connect Stairways button clicked');
-        setMode('connect-stairway');
-    });
-    if (modeSpecialBtn) modeSpecialBtn.addEventListener('click', () => setMode('special'));
-    if (modeWallBtn) modeWallBtn.addEventListener('click', () => setMode('wall'));
-    if (toggleGraphBtn) toggleGraphBtn.addEventListener('click', toggleGraphVisualization);
-
-    const modeTrafficZoneBtn = document.getElementById('mode-traffic-zone');
-    if (modeTrafficZoneBtn) modeTrafficZoneBtn.addEventListener('click', () => setMode('traffic-zone'));
-
-    setupDebugToggle();
-    setupSaveButton();
     setupScheduleModal();
 
     // Floor switcher
@@ -1488,34 +1341,51 @@
     // Mobile panel collapse/expand
     const navPanel = document.getElementById('nav-panel');
     const panelHandle = document.getElementById('panel-handle');
-    const quickNavBtn = document.getElementById('quick-nav-btn');
     let panelState: 'normal' | 'expanded' | 'minimized' = 'normal';
 
-    /**
-     * Show or hide the floating `#quick-nav-btn` based on the current panel
-     * state and viewport width.
-     *
-     * The button is only relevant on mobile (< 768 px) and is visible only
-     * when the navigation panel is fully minimized, giving users a one-tap
-     * way to restore the panel without needing to find the drag handle.
-     */
-    function updateQuickNavButton(): void {
-        if (quickNavBtn && window.innerWidth < 768) {
-            quickNavBtn.style.display = panelState === 'minimized' ? 'flex' : 'none';
-        } else if (quickNavBtn) {
-            quickNavBtn.style.display = 'none';
-        }
+    function collapsePanelForRoute(): void {
+        if (!navPanel || window.innerWidth >= 768) return;
+        navPanel.classList.remove('panel-expanded');
+        navPanel.classList.add('panel-minimized');
+        panelState = 'minimized';
     }
 
-    if (quickNavBtn) {
-        quickNavBtn.addEventListener('click', () => {
-            if (navPanel) {
-                navPanel.classList.remove('panel-minimized');
-                navPanel.classList.remove('panel-expanded');
-                panelState = 'normal';
-                updateQuickNavButton();
+    function setupMobileKeyboardAvoidance(): void {
+        if (!navPanel || typeof window === 'undefined' || !window.visualViewport) return;
+
+        const isMobile = () => window.innerWidth < 768;
+
+        const applyKeyboardInset = (): void => {
+            if (!isMobile()) {
+                navPanel.style.bottom = '';
+                return;
             }
+
+            const viewport = window.visualViewport;
+            const keyboardInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+
+            navPanel.style.bottom = `${keyboardInset}px`;
+        };
+
+        const activeInputSelector = 'input, textarea, [contenteditable="true"]';
+        document.addEventListener('focusin', (event) => {
+            const target = event.target as Element | null;
+            if (!target || !target.matches(activeInputSelector)) return;
+            window.setTimeout(() => {
+                (target as HTMLElement).scrollIntoView({ block: 'center', behavior: 'smooth' });
+            }, 120);
+            applyKeyboardInset();
         });
+
+        document.addEventListener('focusout', () => {
+            window.setTimeout(applyKeyboardInset, 100);
+        });
+
+        window.visualViewport.addEventListener('resize', applyKeyboardInset);
+        window.addEventListener('orientationchange', applyKeyboardInset);
+        window.addEventListener('resize', applyKeyboardInset);
+
+        applyKeyboardInset();
     }
 
     if (panelHandle && navPanel) {
@@ -1530,7 +1400,6 @@
                     navPanel.classList.add('panel-minimized');
                     panelState = 'minimized';
                 }
-                updateQuickNavButton();
             }
         });
 
@@ -1544,7 +1413,6 @@
                         navPanel.classList.remove('panel-expanded');
                         navPanel.classList.add('panel-minimized');
                         panelState = 'minimized';
-                        updateQuickNavButton();
                     }
                     lastTap = now;
                 }
@@ -1552,41 +1420,10 @@
         }
     }
 
-    window.addEventListener('resize', updateQuickNavButton);
-    updateQuickNavButton();
-
-    let visualViewportRef = null;
-    let onVVResize = null;
-
-    // iOS virtual keyboard: shift the bottom panel up so inputs stay visible
-    if ('visualViewport' in window && window.visualViewport) {
-        visualViewportRef = window.visualViewport;
-        onVVResize = () => {
-            if (!navPanel || window.innerWidth >= 768) {
-                if (navPanel) navPanel.style.bottom = '';
-                return;
-            }
-            // On iOS, innerHeight stays fixed while vv.height shrinks when keyboard opens.
-            // offsetTop accounts for any visual-viewport scroll offset.
-            const keyboardHeight = window.innerHeight - (visualViewportRef.height + visualViewportRef.offsetTop);
-            navPanel.style.bottom = keyboardHeight > 50 ? `${keyboardHeight}px` : '';
-        };
-        visualViewportRef.addEventListener('resize', onVVResize);
-        visualViewportRef.addEventListener('scroll', onVVResize);
-        onVVResize();
-    }
+    setupMobileKeyboardAvoidance();
 
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {
-        if (visualViewportRef && onVVResize) {
-            visualViewportRef.removeEventListener('resize', onVVResize);
-            visualViewportRef.removeEventListener('scroll', onVVResize);
-        }
-        for (const edge of state.graphEdges) {
-            state.map?.removeLayer(edge);
-        }
-        state.graphEdges = [];
-
         for (const m of state.routeMarkers) {
             if ('__isOutline' in m) {
                 state.map?.removeLayer(m.layer);
@@ -1630,7 +1467,6 @@
         border-radius: var(--radius-lg);
         border: 1px solid var(--panel-border);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        backdrop-filter: blur(12px);
     }
     
     /* Mobile: Top left corner */
@@ -1768,60 +1604,6 @@
         }
     }
     
-    /* Quick Nav Button (Mobile) */
-    #quick-nav-btn {
-        position: fixed;
-        bottom: calc(16px + env(safe-area-inset-bottom));
-        right: calc(16px + env(safe-area-inset-right));
-        z-index: 1001;
-        background: var(--amber-500);
-        color: var(--panel-bg);
-        border: none;
-        border-radius: var(--radius-full);
-        padding: 14px 24px;
-        font-size: 15px;
-        font-weight: 700;
-        font-family: var(--font-body);
-        box-shadow: 0 4px 20px rgba(240, 165, 0, 0.4);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        transition: all var(--duration-normal) var(--ease-out);
-        -webkit-tap-highlight-color: transparent;
-    }
-    
-    #quick-nav-btn:hover {
-        background: var(--amber-400);
-        box-shadow: 0 6px 24px rgba(240, 165, 0, 0.5);
-        transform: translateY(-2px);
-    }
-    
-    #quick-nav-btn:active {
-        transform: scale(0.95) translateY(0);
-    }
-    
-    #quick-nav-btn svg {
-        width: 20px;
-        height: 20px;
-    }
-    
-    @media (min-width: 768px) {
-        #quick-nav-btn {
-            display: none !important;
-        }
-    }
-    
-    #debug-ui {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        z-index: 1000;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        align-items: flex-end;
-    }
     button {
         padding: 10px 16px;
         border: 1px solid var(--panel-border);
