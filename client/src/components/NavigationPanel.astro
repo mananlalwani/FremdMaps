@@ -271,7 +271,7 @@
     /* Suppress 300ms tap delay on the panel's interactive elements */
     touch-action: manipulation;
     font-family: var(--font-body);
-    transition: max-height var(--duration-slow) var(--ease-out), transform var(--duration-slow) var(--ease-out);
+    transition: max-height var(--duration-slow) var(--ease-out), transform var(--duration-slow) var(--ease-out), bottom var(--duration-normal) var(--ease-out);
     
     /* Dot grid texture */
     background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0);
@@ -1539,10 +1539,16 @@
 
   /* ===== All Paths View ===== */
   .schedule-paths-list {
-    padding: 12px 20px 20px;
+    padding: 12px 20px calc(20px + env(safe-area-inset-bottom));
     display: flex;
     flex-direction: column;
     gap: 10px;
+  }
+
+  @media (min-width: 768px) {
+    .schedule-paths-list {
+      padding-bottom: 20px;
+    }
   }
 
   .schedule-path-item {

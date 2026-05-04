@@ -1,7 +1,0 @@
-name = "schoolwayfinder"
-main = "worker/index.ts"
-compatibility_date = "2026-03-30"
-
-[assets]
-binding = "ASSETS"
-directory = "client/dist"

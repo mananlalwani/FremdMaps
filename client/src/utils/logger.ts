@@ -20,9 +20,9 @@ type LogLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
  *
  * - `isDevelopment`: when `true`, `perf()` timings are printed and all levels
  *   are active (unless `enabledLevels` is overridden). Defaults to
- *   `import.meta.env.DEV ?? false` — the `?? false` fallback ensures production
- *   mode is assumed in non-Astro contexts (e.g. Vitest without a full env shim),
- *   preventing verbose debug output from leaking outside the dev build.
+ *   `import.meta.env.DEV ?? true` — the `?? true` fallback ensures all levels
+ *   are on in non-Astro contexts (e.g. plain Node scripts) where `import.meta`
+ *   may not carry a `.env` shim.
  * - `enabledLevels`: explicit allow-list of log levels. Defaults to all five
  *   in dev, `['warn', 'error']` in production.
  * - `prefix`: optional string prepended to every message as `[prefix] …`.
@@ -45,7 +45,7 @@ class Logger {
   private config: LoggerConfig;
 
   constructor(config?: Partial<LoggerConfig>) {
-    const isDev = import.meta.env.DEV ?? false;
+    const isDev = import.meta.env.DEV ?? true;
     
     this.config = {
       isDevelopment: isDev,

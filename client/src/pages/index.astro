@@ -1,8 +1,7 @@
 ---
-import MapView from "../components/Map.astro";
+import Map from "../components/Map.astro";
 import NavigationPanel from "../components/NavigationPanel.astro";
 import OnboardingOverlay from "../components/OnboardingOverlay.astro";
-import { pwaInfo } from 'virtual:pwa-info';
 ---
 
 <html lang="en">
@@ -10,13 +9,10 @@ import { pwaInfo } from 'virtual:pwa-info';
 		<meta charset="utf-8" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<link rel="icon" href="/favicon.ico" />
-		<link rel="apple-touch-icon" href="/icons/icon-192.png" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-		<meta name="theme-color" content="#1a1a2e" />
 		<meta name="generator" content={Astro.generator} />
 		<title>Wayfinder - Floor 2</title>
-		{ pwaInfo && <Fragment set:html={pwaInfo.webManifest.linkTag} /> }
-
+		
 		<!-- Google Fonts -->
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -147,6 +143,7 @@ import { pwaInfo } from 'virtual:pwa-info';
 			.leaflet-control-attribution {
 				font-size: 10px !important;
 				font-family: var(--font-mono) !important;
+				backdrop-filter: blur(8px);
 			}
 			
 			.leaflet-control-attribution a {
@@ -202,90 +199,91 @@ import { pwaInfo } from 'virtual:pwa-info';
 		</style>
 	</head>
 	<body>
-		<MapView />
+		<Map />
 		<NavigationPanel />
 		<OnboardingOverlay />
+		
+		<!-- Mode Toggle Button -->
+		<button id="mode-toggle">
+			Admin Mode
+		</button>
+		
 		<script>
-			import { registerSW } from 'virtual:pwa-register'
+			const urlParams = new URLSearchParams(window.location.search);
+			const isAdmin = urlParams.has('admin');
 
-			let swRegisterError = ''
-			registerSW({
-				immediate: true,
-				onRegisterError(error) {
-					swRegisterError = error instanceof Error ? error.message : String(error)
-				},
-			})
+			const debugUI = document.getElementById('debug-ui');
+			const navPanel = document.getElementById('nav-panel');
+			const modeToggle = document.getElementById('mode-toggle');
 
-			const urlParams = new URLSearchParams(window.location.search)
-			const showPwaDebug = import.meta.env.DEV || urlParams.has('admin')
-
-			if (showPwaDebug) {
-				const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-
-				const badge = document.createElement('div')
-				badge.id = 'pwa-debug-badge'
-				badge.style.position = 'fixed'
-				badge.style.left = '12px'
-				badge.style.bottom = '12px'
-				badge.style.zIndex = '9999'
-				badge.style.padding = '8px 10px'
-				badge.style.borderRadius = '10px'
-				badge.style.background = 'rgba(22, 22, 30, 0.92)'
-				badge.style.border = '1px solid rgba(255, 255, 255, 0.1)'
-				badge.style.color = '#e8e6e1'
-				badge.style.fontFamily = 'var(--font-mono)'
-				badge.style.fontSize = '11px'
-				badge.style.maxWidth = 'min(92vw, 680px)'
-				badge.style.lineHeight = '1.4'
-				badge.style.wordBreak = 'break-word'
-				badge.style.boxShadow = '0 8px 24px rgba(0,0,0,0.45)'
-				badge.textContent = `Origin: ${window.location.origin} | SW: checking...`
-
-				document.body.appendChild(badge)
-
-				if ('serviceWorker' in navigator) {
-					const updateBadge = async () => {
-						try {
-							if (swRegisterError) {
-								badge.textContent = `Origin: ${window.location.origin} | SW error: ${swRegisterError}`
-								return
-							}
-
-							let registration = await navigator.serviceWorker.getRegistration()
-
-							if (!registration) {
-								badge.textContent = `Origin: ${window.location.origin} | SW: registering...`
-								for (let attempt = 0; attempt < 10; attempt += 1) {
-									await sleep(250)
-									registration = await navigator.serviceWorker.getRegistration()
-									if (registration) {
-										break
-									}
-								}
-							}
-
-							if (!registration) {
-								const registrations = await navigator.serviceWorker.getRegistrations()
-								const swCheck = await fetch('/sw.js', { cache: 'no-store' })
-								badge.textContent = `Origin: ${window.location.origin} | SW: not registered | regs: ${registrations.length} | /sw.js: ${swCheck.status}`
-								return
-							}
-
-							const swStatus = registration.active ? 'active' : 'installing/waiting'
-							badge.textContent = `Origin: ${window.location.origin} | SW: ${swStatus} | Scope: ${registration.scope}`
-						} catch {
-							badge.textContent = `Origin: ${window.location.origin} | SW: registration check failed`
-						}
-					}
-
-					void updateBadge()
-					navigator.serviceWorker.addEventListener('controllerchange', () => {
-						void updateBadge()
-					})
+			function updateModeUI() {
+				if (isAdmin) {
+					if (debugUI) debugUI.style.display = 'flex';
+					if (navPanel) navPanel.style.display = 'none';
+					if (modeToggle) modeToggle.textContent = 'User Mode';
 				} else {
-					badge.textContent = `Origin: ${window.location.origin} | SW: unsupported`
+					if (debugUI) debugUI.style.display = 'none';
+					if (navPanel) navPanel.style.display = 'block';
+					if (modeToggle) modeToggle.textContent = 'Admin Mode';
 				}
 			}
+
+			updateModeUI();
+
+			if (modeToggle) {
+				modeToggle.addEventListener('click', () => {
+					if (isAdmin) {
+						// Strip ?admin, keep other params
+						urlParams.delete('admin');
+						const qs = urlParams.toString();
+						window.location.search = qs || '';
+					} else {
+						// Add ?admin as a valueless flag (URLSearchParams always adds '=',
+						// so build the query string manually)
+						const otherParams = urlParams.toString();
+						window.location.search = otherParams ? `${otherParams}&admin` : 'admin';
+					}
+				});
+			}
 		</script>
+		
+		<style>
+			#mode-toggle {
+				position: fixed;
+				top: calc(16px + env(safe-area-inset-top));
+				right: calc(16px + env(safe-area-inset-right));
+				z-index: 1001;
+				padding: 12px 16px;
+				background: var(--panel-bg);
+				color: var(--text-secondary);
+				border: 1px solid var(--panel-border);
+				border-radius: var(--radius-md);
+				font-weight: 600;
+				cursor: pointer;
+				font-size: 12px;
+				font-family: var(--font-mono);
+				letter-spacing: 0.5px;
+				text-transform: uppercase;
+				transition: all var(--duration-normal) var(--ease-out);
+				backdrop-filter: blur(12px);
+			}
+			
+			@media (min-width: 768px) {
+				#mode-toggle {
+					bottom: calc(20px + env(safe-area-inset-bottom));
+					top: auto;
+					right: calc(20px + env(safe-area-inset-right));
+					padding: 10px 18px;
+					font-size: 12px;
+				}
+			}
+			
+			#mode-toggle:hover,
+			#mode-toggle:active {
+				border-color: var(--amber-500);
+				color: var(--amber-400);
+				box-shadow: var(--shadow-amber);
+			}
+		</style>
 	</body>
 </html>
