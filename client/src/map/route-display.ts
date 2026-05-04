@@ -27,6 +27,15 @@ export interface RouteDisplayCallbacks {
 
 let _cb: RouteDisplayCallbacks
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 /**
  * Inject the callbacks from the Map.astro orchestrator.
  * Must be called once before `displayRoute` is invoked.
@@ -49,21 +58,15 @@ export function displayRoute(path: Node[], _totalDistance: number): void {
   const isMultiFloor = floors.length > 1
   routeLogger.log(`Route: ${path.length} nodes, floors: ${floors.join(', ')}, multi-floor: ${isMultiFloor}`)
 
+  const startFloor = path[0]?.floor
+  if (startFloor && startFloor !== state.currentFloor) {
+    routeLogger.log(`Switching to route start floor ${startFloor} from ${state.currentFloor}`)
+    _cb.switchFloor(startFloor)
+    return
+  }
+
   if (isMultiFloor) {
     routeLogger.log(`Multi-floor route detected: ${floors.join(', ')}`)
-
-    const startFloor = path[0].floor
-    if (startFloor && startFloor !== state.currentFloor) {
-      _cb.switchFloor(startFloor)
-      // Delay the redraw by 100 ms to let switchFloor finish loading the floor
-      // image and data before we try to paint the route polylines.  Without this
-      // guard the polylines can render before the image overlay is ready and
-      // appear on the wrong floor.
-      setTimeout(() => {
-        redrawRouteForCurrentFloor()
-      }, 100)
-      return
-    }
   }
 
   redrawRouteForCurrentFloor()
@@ -241,9 +244,10 @@ export function redrawRouteForCurrentFloor(): void {
       const targetFloor = neighbor?.floor
 
       const label = targetFloor ? `Floor ${targetFloor}` : ''
+      const safeLabel = label ? escapeHtml(label) : ''
       const stairIcon = L.divIcon({
         className: 'route-marker stairway',
-        html: `<div style="background: #9C27B0; color: white; min-width: 28px; height: 28px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; font-family: 'Plus Jakarta Sans', sans-serif; border: 2px solid white; box-shadow: 0 0 12px rgba(156,39,176,0.5); padding: 0 8px; gap: 4px; white-space: nowrap; cursor: pointer;">&#x1FA9C;${label ? ' &rarr; ' + label : ''}</div>`,
+        html: `<div style="background: #9C27B0; color: white; min-width: 28px; height: 28px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; font-family: 'Plus Jakarta Sans', sans-serif; border: 2px solid white; box-shadow: 0 0 12px rgba(156,39,176,0.5); padding: 0 8px; gap: 4px; white-space: nowrap; cursor: pointer;">&#x1FA9C;${safeLabel ? ' &rarr; ' + safeLabel : ''}</div>`,
         iconSize: [label ? 110 : 32, 28],
         iconAnchor: [label ? 55 : 16, 14],
       })
@@ -262,6 +266,14 @@ export function redrawRouteForCurrentFloor(): void {
   const allVisibleCoords = segments.flat().map(n => [n.lat, n.lng] as [number, number])
   if (allVisibleCoords.length > 0) {
     state.map.fitBounds(L.latLngBounds(allVisibleCoords), { padding: [100, 100] })
+
+    const routeStart = path[0]
+    if (routeStart?.floor === state.currentFloor) {
+      const zoomedStart = Math.min(state.map.getZoom() + 0.6, MAP_CONFIG.MAX_ZOOM)
+      state.map.flyTo([routeStart.lat, routeStart.lng], zoomedStart, {
+        duration: 0.3,
+      })
+    }
   }
 
   generateDirections(state.currentRouteFullPath, state.currentFloor)

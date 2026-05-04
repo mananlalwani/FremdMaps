@@ -38,9 +38,9 @@ export const MAP_CONFIG = {
  *   the floor-plan `image` served from `client/public/`.
  *
  * To add a new floor:
- *   1. Add an entry here (mirror the change in `server/src/utils/constants.ts`).
+ *   1. Add an entry here.
  *   2. Add the floor image to `client/public/`.
- *   3. Create `server/data/floor<N>/nodes.json`, `walls.json`, `zones.json` (all `[]`).
+ *   3. Create `client/public/data/floor<N>/nodes.json`, `walls.json`, `zones.json` (all `[]`).
  */
 export const FLOORS = {
   DEFAULT: '2',
@@ -48,23 +48,6 @@ export const FLOORS = {
     { id: '1', name: 'Floor 1', image: '/floor1.png' },
     { id: '2', name: 'Floor 2', image: '/floor2.png' },
   ],
-} as const
-
-/**
- * API client configuration.
- *
- * - `DEFAULT_URL`: fallback base URL used when `PUBLIC_API_URL` is not set in
- *   the environment (development default pointing at the Express server).
- * - `ENDPOINTS`: path suffixes for each REST endpoint; combined with the base
- *   URL and `?floor=<id>` query param at call sites.
- */
-export const API_CONFIG = {
-  DEFAULT_URL: 'http://localhost:5173',
-  ENDPOINTS: {
-    NODES: '/api/nodes',
-    WALLS: '/api/walls',
-    ZONES: '/api/zones',
-  },
 } as const
 
 /**

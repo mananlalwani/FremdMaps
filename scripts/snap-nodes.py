@@ -18,7 +18,7 @@ from pathlib import Path
 
 THRESHOLD = 50  # units — nodes within this distance share a row / column
 
-DATA_ROOT = Path(__file__).parent.parent / "server" / "data"
+DATA_ROOT = Path(__file__).parent.parent / "client" / "public" / "data"
 FLOORS = ["1", "2"]
 
 

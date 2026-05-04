@@ -1,5 +1,5 @@
 /**
- * localStorage wrapper for search history, favorites, and schedule.
+ * localStorage wrapper for search history, favorites, analytics, and schedule.
  *
  * All public functions degrade gracefully when localStorage is unavailable
  * (e.g. private browsing mode) — reads return default values, writes silently
@@ -9,6 +9,9 @@
  * - `RECENT_SEARCHES` — ordered ring buffer of route searches; read by
  *   `getFrequentRooms` → `rankWithRecency` to boost recently-visited rooms.
  * - `FAVORITES`       — flat array of favorited node UIDs.
+ * - `SEARCH_ANALYTICS` — write-only telemetry (query + result count); not
+ *   surfaced in the UI but useful for future ranking improvements.  Cleared
+ *   automatically when a `QuotaExceededError` occurs.
  * - `SCHEDULE`        — user's class schedule (period → room assignments).
  */
 
@@ -18,6 +21,7 @@ import { logger } from './logger'
 const STORAGE_KEYS = {
   RECENT_SEARCHES: 'nav_recent_searches',
   FAVORITES: 'nav_favorites',
+  SEARCH_ANALYTICS: 'nav_search_analytics',
   SCHEDULE: 'nav_schedule'
 } as const
 
@@ -26,6 +30,13 @@ const STORAGE_KEYS = {
  * 10 covers a full school day of navigation without excessive localStorage use.
  */
 const MAX_RECENT_SEARCHES = 10
+
+/**
+ * Maximum number of analytics entries to retain.
+ * 100 entries is sufficient for trend analysis while keeping the payload small.
+ * When the limit is reached, the oldest entries are trimmed (FIFO).
+ */
+const MAX_ANALYTICS_ENTRIES = 100
 
 /**
  * Cached localStorage availability check — tested once at module load time.
@@ -71,7 +82,9 @@ function getItem<T>(key: string, defaultValue: T): T {
 /**
  * Safely serialise and write a value to localStorage.
  *
- * Returns `false` when storage is unavailable or write fails.
+ * On `QuotaExceededError`, automatically clears the analytics key to free
+ * space and retries once.  Returns `false` when storage is unavailable or
+ * every write attempt fails.
  *
  * @param key   localStorage key to write.
  * @param value Value to serialise as JSON.
@@ -84,7 +97,22 @@ function setItem(key: string, value: unknown): boolean {
     localStorage.setItem(key, JSON.stringify(value))
     return true
   } catch (e) {
-    logger.warn(`Failed to write to localStorage: ${key}`, e)
+    // Handle quota exceeded error
+    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+      logger.error('localStorage quota exceeded')
+      // Try to free space by clearing analytics
+      localStorage.removeItem(STORAGE_KEYS.SEARCH_ANALYTICS)
+      
+      // Retry once
+      try {
+        localStorage.setItem(key, JSON.stringify(value))
+        return true
+      } catch (retryError) {
+        logger.error('Failed to save after clearing analytics', retryError)
+      }
+    } else {
+      logger.warn(`Failed to write to localStorage: ${key}`, e)
+    }
     return false
   }
 }
@@ -203,6 +231,35 @@ export function toggleFavorite(uid: string): boolean {
  */
 export function clearFavorites(): void {
   setItem(STORAGE_KEYS.FAVORITES, [])
+}
+
+// ========== Search Analytics (Optional) ==========
+
+interface SearchAnalyticsEntry {
+  query: string
+  timestamp: number
+  resultCount: number
+}
+
+/**
+ * Track a search query for analytics
+ * Used to improve search ranking
+ */
+export function trackSearch(query: string, resultCount: number): void {
+  const analytics = getItem<SearchAnalyticsEntry[]>(STORAGE_KEYS.SEARCH_ANALYTICS, [])
+  
+  analytics.push({
+    query: query.toLowerCase().trim(),
+    timestamp: Date.now(),
+    resultCount
+  })
+
+  // Limit size
+  if (analytics.length > MAX_ANALYTICS_ENTRIES) {
+    analytics.splice(0, analytics.length - MAX_ANALYTICS_ENTRIES)
+  }
+
+  setItem(STORAGE_KEYS.SEARCH_ANALYTICS, analytics)
 }
 
 /**

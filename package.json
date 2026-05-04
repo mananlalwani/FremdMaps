@@ -2,11 +2,14 @@
     "name": "school-navigation-app",
     "private": true,
     "scripts": {
-        "dev": "concurrently \"pnpm --filter server dev\" \"pnpm --filter client dev\" -n \"SERVER,CLIENT\" -c \"blue,magenta\"",
-        "build": "pnpm -r build",
-        "test": "pnpm -r test"
+        "dev": "pnpm --filter client dev",
+        "validate:data": "node scripts/validate-data.mjs",
+        "build": "pnpm run validate:data && pnpm --filter client build",
+        "test": "pnpm --filter client test",
+        "deploy": "pnpm run build && wrangler deploy",
+        "preview": "pnpm run build && wrangler dev"
     },
     "devDependencies": {
-        "concurrently": "^8.2.2"
+        "wrangler": "4.78.0"
     }
 }

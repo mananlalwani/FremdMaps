@@ -41,6 +41,7 @@
         getFavorites,
         toggleFavorite,
         getFrequentRooms,
+        trackSearch,
         getSchedule,
         saveSchedule
     } from "../utils/storage";
@@ -427,7 +428,7 @@
      * - Empty query → render the featured-rooms list (`renderFeaturedRooms`).
      * - Query meets minimum length → run Fuse.js search, filter to room nodes
      *   only, boost results with recency data, then render (`renderSearchResults`).
-     * - Uses recency data to boost ranking.
+     * - Tracks the search for analytics / recency boosting via `trackSearch`.
      *
      * @param query    - Current text in the input field
      * @param type     - Which search field triggered the input (`'start'` | `'end'`)
@@ -450,6 +451,7 @@
             const frequentRooms = getFrequentRooms();
             results = rankWithRecency(results, frequentRooms);
 
+            trackSearch(trimmedQuery, results.length);
             renderSearchResults(results, dropdown, type);
             state.currentSearchResults = results;
         }
