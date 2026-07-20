@@ -1,6 +1,6 @@
 # Client application
 
-This workspace contains the Astro PWA for SchoolWayfinder. The root [README](../README.md) covers
+This workspace contains the Astro PWA for Fremd Maps. The root [README](../README.md) covers
 setup, verification, deployment, and the public project overview.
 
 ## Commands

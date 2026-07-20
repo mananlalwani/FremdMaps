@@ -1,6 +1,6 @@
-# Contributing to SchoolWayfinder
+# Contributing to Fremd Maps
 
-Thanks for helping improve SchoolWayfinder. Small, focused pull requests are easiest to review.
+Thanks for helping improve Fremd Maps. Small, focused pull requests are easiest to review.
 
 ## Before you start
 

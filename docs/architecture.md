@@ -1,6 +1,6 @@
 # Architecture
 
-SchoolWayfinder is a static, client-rendered Astro application. It has no application API, server
+Fremd Maps is a static, client-rendered Astro application. It has no application API, server
 database, or user accounts: floor plans and navigation data are public static assets, while search
 and routing run in the visitor's browser.
 

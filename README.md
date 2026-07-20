@@ -1,7 +1,7 @@
-# SchoolWayfinder
+# Fremd Maps
 
-**An offline-first indoor navigation PWA for a multi-floor school.** Search for a room, build an
-accessible route across floors, and follow clear turn-by-turn directions—entirely in the browser.
+**An offline-first indoor navigation PWA for a multi-floor school.** Search for a room, build a
+route across floors, and follow clear turn-by-turn directions—entirely in the browser.
 
 [Open the live demo](https://maps.mananlalwani.com) · [Architecture](docs/architecture.md) ·
 [Contributing](CONTRIBUTING.md)
