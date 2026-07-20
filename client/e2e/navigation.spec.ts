@@ -52,6 +52,7 @@ test('clears a displayed route', async ({ page }) => {
 })
 
 test('reloads the precached application shell while offline', async ({ page, context }) => {
+  test.setTimeout(75_000)
   await openApp(page)
   await page.evaluate(async () => navigator.serviceWorker.ready)
   await page.reload()

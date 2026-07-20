@@ -30,7 +30,7 @@ import '../styles/navigation-utilities.css'
     - #schedule-view-paths  — read-only route cards; populated by renderPaths()
     - #schedule-view-edit   — period input rows;    populated by renderSchedulePeriods()
 -->
-<div id="nav-panel" class="dot-grid-bg scrollbar-thin">
+<aside id="nav-panel" class="dot-grid-bg scrollbar-thin" aria-labelledby="nav-panel-title">
   <!-- Mobile drag handle — click toggles expanded and minimized states.
        Handled by panel-behavior.ts.
        Hidden on desktop (≥ 768 px) via CSS. -->
@@ -48,7 +48,7 @@ import '../styles/navigation-utilities.css'
   <div class="panel-header">
     <div class="header-top">
       <div class="header-title-group">
-        <h2>Fremd Maps</h2>
+        <h2 id="nav-panel-title">Fremd Maps</h2>
       </div>
       <div class="header-actions">
         <!-- Clock button — toggles #recent-dropdown. search-ui.ts applies
@@ -201,7 +201,7 @@ import '../styles/navigation-utilities.css'
   <div id="empty-state">
     <div class="loading-spinner"></div>
   </div>
-</div>
+</aside>
 
 <!-- Schedule Modal — single modal element, two child views toggled by JS.
      z-index: 1100 (above the nav panel at z-index: 1000).
