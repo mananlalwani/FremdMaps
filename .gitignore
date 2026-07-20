@@ -1,0 +1,59 @@
+# build output
+dist/
+build/
+# generated types
+.astro/
+
+# dependencies
+node_modules/
+.pnpm-store/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+*.log
+
+# environment variables
+.env
+.env.local
+.env.production
+
+# macOS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+.tmp/
+temp/
+*.tmp
+
+# Debug
+.cache/
+
+# Cloudflare tunnel ephemeral URL
+mobile/.tunnel-url
+
+# Stale source floor plan images in repo root
+/floorone.png
+/floorone_optimized.png
+/floortwo.png
+/floortwo_8bit.png
+/aviocl.png
+/aviocl_8bit.png
+
+# PWA dev build artifacts
+client/dev-dist/
