@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - serverless
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --filter client lint
+
+      - name: Format
+        run: pnpm --filter client exec prettier --check src
+
+      - name: Typecheck
+        run: pnpm --filter client typecheck
+
+      - name: Test with critical-path coverage
+        run: pnpm --filter client test:coverage
+
+      - name: Data validator tests
+        run: pnpm run test:data
+
+      - name: Build (includes data validation)
+        run: pnpm run build
+
+      - name: Install Chromium for browser smoke tests
+        run: pnpm --filter client exec playwright install --with-deps chromium
+
+      - name: Browser smoke tests
+        run: pnpm run test:e2e
+
+      - name: Dependency audit (high+)
+        run: pnpm audit --audit-level high

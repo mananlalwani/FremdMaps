@@ -1,0 +1,302 @@
+---
+import MapView from '../components/Map.astro'
+import NavigationPanel from '../components/NavigationPanel.astro'
+import OnboardingOverlay from '../components/OnboardingOverlay.astro'
+import { pwaInfo } from 'virtual:pwa-info'
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1a1a2e" />
+    <meta name="generator" content={Astro.generator} />
+    <title>Fremd Maps - Floor 2</title>
+    {pwaInfo && <Fragment set:html={pwaInfo.webManifest.linkTag} />}
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style is:global>
+      /* Design System - Fremd Maps */
+      :root {
+        /* Typography */
+        --font-display: 'Plus Jakarta Sans', sans-serif;
+        --font-body: 'Plus Jakarta Sans', sans-serif;
+        --font-mono: 'Plus Jakarta Sans', sans-serif;
+
+        /* Dark Panel Palette */
+        --panel-bg: #16161e;
+        --panel-surface: #1e1e2a;
+        --panel-elevated: #262636;
+        --panel-border: rgba(255, 255, 255, 0.06);
+        --panel-border-hover: rgba(255, 255, 255, 0.12);
+
+        /* Amber Accent System */
+        --amber-50: #fff8e1;
+        --amber-100: #ffecb3;
+        --amber-300: #ffd54f;
+        --amber-400: #ffca28;
+        --amber-500: #f0a500;
+        --amber-600: #e09200;
+        --amber-glow: rgba(240, 165, 0, 0.15);
+        --amber-glow-strong: rgba(240, 165, 0, 0.3);
+
+        /* Text Colors */
+        --text-primary: #e8e6e1;
+        --text-secondary: #9895a3;
+        --text-muted: #5c5970;
+        --text-accent: var(--amber-400);
+
+        /* Semantic */
+        --success: #4ade80;
+        --success-muted: rgba(74, 222, 128, 0.15);
+        --info: #60a5fa;
+        --error: #f87171;
+        --error-muted: rgba(248, 113, 113, 0.15);
+
+        /* Stairway */
+        --stair-color: #9c27b0;
+        --stair-color-dark: #7b1fa2;
+        --stair-glow: rgba(156, 39, 176, 0.5);
+
+        /* Route markers */
+        --route-start: #4caf50;
+        --route-end: #f44336;
+
+        /* Map */
+        --map-bg: #1a1a24;
+        --nav-panel-width: 380px;
+
+        /* Elevation */
+        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+        --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+        --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+        --shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.6);
+        --shadow-amber: 0 4px 20px rgba(240, 165, 0, 0.2);
+        --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+        /* Border Radius */
+        --radius-sm: 4px;
+        --radius-md: 8px;
+        --radius-lg: 14px;
+        --radius-xl: 20px;
+        --radius-full: 9999px;
+
+        /* Spacing */
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-10: 40px;
+        --space-12: 48px;
+
+        /* Motion */
+        --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+        --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        --duration-fast: 120ms;
+        --duration-normal: 200ms;
+        --duration-slow: 350ms;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        background: #0e0e14;
+        font-family: var(--font-body);
+        color: var(--text-primary);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-wrap: pretty;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      *:focus {
+        outline: 2px solid var(--amber-500);
+        outline-offset: 2px;
+      }
+
+      *:focus:not(:focus-visible) {
+        outline: none;
+      }
+
+      *:focus-visible {
+        outline: 2px solid var(--amber-500);
+        outline-offset: 2px;
+      }
+
+      /* Selection color */
+      ::selection {
+        background: var(--amber-glow-strong);
+        color: var(--amber-50);
+      }
+
+      /* Leaflet Control Overrides - Dark Theme */
+      .leaflet-container .leaflet-control-zoom a,
+      .leaflet-container .leaflet-control-attribution {
+        background: var(--panel-bg);
+        color: var(--text-secondary);
+        border-color: var(--panel-border);
+      }
+
+      .leaflet-container .leaflet-control-zoom a:hover {
+        background: var(--panel-elevated);
+        color: var(--text-primary);
+        border-color: var(--panel-border-hover);
+      }
+
+      .leaflet-container .leaflet-control-attribution {
+        font-size: 10px;
+        font-family: var(--font-body);
+      }
+
+      .leaflet-container .leaflet-control-attribution a {
+        color: var(--amber-400);
+      }
+
+      /* Leaflet Bar */
+      .leaflet-container .leaflet-bar {
+        border: 1px solid var(--panel-border);
+        box-shadow: var(--shadow-lg);
+      }
+
+      .leaflet-container .leaflet-bar a {
+        background: var(--panel-bg);
+        border-bottom-color: var(--panel-border);
+        color: var(--text-secondary);
+      }
+
+      .leaflet-container .leaflet-bar a:hover {
+        background: var(--panel-elevated);
+        color: var(--amber-400);
+      }
+
+      /* Leaflet Popup Dark Theme */
+      .leaflet-container .leaflet-popup-content-wrapper,
+      .leaflet-container .leaflet-popup-tip {
+        background: var(--panel-surface);
+        color: var(--text-primary);
+        box-shadow: var(--shadow-xl);
+      }
+
+      .leaflet-container .leaflet-popup-content {
+        font-family: var(--font-body);
+      }
+
+      .leaflet-container .leaflet-popup-close-button {
+        color: var(--text-muted);
+      }
+
+      .leaflet-container .leaflet-popup-close-button:hover {
+        color: var(--text-primary);
+      }
+
+      /* Keep the scanned floor-plan edge distinct from the dark map canvas
+         without changing the image's layout. */
+      .leaflet-image-layer {
+        outline: 1px solid rgba(255, 255, 255, 0.1);
+        outline-offset: -1px;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+
+      #update-ready {
+        position: fixed;
+        right: var(--space-4);
+        bottom: var(--space-4);
+        z-index: 1200;
+        display: none;
+        align-items: center;
+        gap: var(--space-3);
+        max-width: min(420px, calc(100vw - 32px));
+        padding: var(--space-3) var(--space-4);
+        color: var(--text-primary);
+        background: var(--panel-elevated);
+        border: 1px solid var(--amber-500);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-xl), var(--shadow-amber);
+      }
+
+      #update-ready button {
+        min-height: 40px;
+        padding: 0 var(--space-3);
+        color: #1a1a24;
+        font: 700 12px var(--font-body);
+        background: var(--amber-400);
+        border: 0;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition-property: background-color, box-shadow, transform;
+        transition-duration: var(--duration-fast);
+        transition-timing-function: var(--ease-out);
+      }
+
+      #update-ready button:hover {
+        background: var(--amber-300);
+        box-shadow: var(--shadow-sm);
+      }
+
+      #update-ready button:active {
+        transform: scale(0.96);
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>
+      <div
+        style="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#0e0e14;color:#e8e6e1;font-family:sans-serif;padding:24px;text-align:center"
+      >
+        Fremd Maps requires JavaScript to display the interactive map and navigation. Please enable
+        JavaScript in your browser settings.
+      </div>
+    </noscript>
+    <MapView />
+    <NavigationPanel />
+    <OnboardingOverlay />
+    <div id="update-ready" role="status" aria-live="polite">
+      <span>A newer map is ready.</span>
+      <button id="update-ready-reload" type="button">Reload</button>
+    </div>
+    <script>
+      import { registerSW } from 'virtual:pwa-register'
+
+      const updateReady = document.getElementById('update-ready')
+      const reloadButton = document.getElementById('update-ready-reload')
+      const updateSW = registerSW({
+        immediate: true,
+        onNeedRefresh() {
+          if (updateReady) updateReady.style.display = 'flex'
+        },
+      })
+
+      reloadButton?.addEventListener('click', () => {
+        void updateSW(true)
+      })
+    </script>
+  </body>
+</html>

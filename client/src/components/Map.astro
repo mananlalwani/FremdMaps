@@ -1,0 +1,537 @@
+<div
+  id="map"
+  role="region"
+  aria-label="School map"
+  aria-describedby="map-instructions"
+  tabindex="0"
+>
+</div>
+<p id="map-instructions" class="visually-hidden">
+  Interactive school map. Use the From and To fields to plan a route; turn-by-turn directions appear
+  in the navigation panel.
+</p>
+
+<!-- Floor Switcher UI -->
+<div id="floor-switcher">
+  <button class="floor-btn active" data-floor="2" aria-current="true">Floor 2</button>
+  <button class="floor-btn" data-floor="1">Floor 1</button>
+</div>
+
+<!-- Multi-Floor Route Banner -->
+<div id="multi-floor-banner" style="display: none;">
+  <span id="banner-text">Route continues on another floor</span>
+  <button id="banner-switch-btn" class="floor-switch-hint">
+    Switch to Floor <span id="banner-floor"></span> →
+  </button>
+</div>
+
+<script>
+  import 'leaflet/dist/leaflet.css'
+  import L from 'leaflet'
+  import type { Graph } from '../utils/types'
+  import { MAP_CONFIG, UI_CONFIG } from '../utils/constants'
+  import { logger } from '../utils/logger'
+
+  import { invalidateSearchCache } from '../utils/search'
+
+  // Map modules
+  import { state } from '../map/map-state'
+  import { updateFavoritesUI } from '../map/favorites-ui'
+  import { createGraphController } from '../map/graph-controller'
+  import { cancelPendingDataLoad, initMap as _initMap, switchFloor } from '../map/map-init'
+  import { setupPanelBehavior } from '../map/panel-behavior'
+  import { setupRouteActions } from '../map/route-actions'
+  import { setupScheduleModal } from '../map/schedule-ui'
+  import {
+    setupSearchUI,
+    updateRecentSearchesUI as refreshRecentSearchesUI,
+  } from '../map/search-ui'
+  import {
+    setRouteDisplayCallbacks,
+    redrawRouteForCurrentFloor,
+    clearRoute,
+  } from '../map/route-display'
+  const urlParams = new URLSearchParams(window.location.search)
+  // `NODE_ENV=production` can be inherited by a local `astro dev` process,
+  // which makes Vite's `DEV` flag false even though its mode remains
+  // development. Treat the development server mode as local development too.
+  const isDevelopmentServer = import.meta.env.DEV || import.meta.env.MODE === 'development'
+  const isLocalPreview = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(
+    window.location.hostname
+  )
+
+  // ========== GRAPH STATE ==========
+
+  /** Visibility graph built by initializeNavigation and used by route-action controllers. */
+  let _graph: Graph | null = null
+  const graphController = createGraphController()
+  let _searchEnhancementsInitialized = false
+  let cleanupSearchUi: (() => void) | null = null
+  let navigationBuildRequestId = 0
+
+  // ========== SAFE DOM HELPERS (XSS Prevention) ==========
+
+  /**
+   * Safely create a paragraph element with text
+   */
+  function createTextParagraph(text: string, style?: string): HTMLParagraphElement {
+    const p = document.createElement('p')
+    p.textContent = text
+    if (style) p.setAttribute('style', style)
+    return p
+  }
+
+  // ========== NAVIGATION LOGIC ==========
+
+  /**
+   * Called by map-init after floor data finishes loading.
+   * Builds the client-side visibility graph, invalidates the search cache,
+   * initialises the search/recent/favourites UI, clears the empty-state
+   * placeholder, and enables the navigation action buttons.
+   */
+  async function initializeNavigation(): Promise<void> {
+    const requestId = ++navigationBuildRequestId
+    if (state.allNodesAllFloors.length < 2) {
+      logger.warn('Not enough nodes for navigation (need at least 2)')
+      return
+    }
+
+    const graphCacheKey = `${state.graphDataRevision}:${MAP_CONFIG.MAX_HALLWAY_DISTANCE}`
+
+    const previousGraph = _graph
+    const nextGraph = await graphController.ensureGraph(
+      state.allNodesAllFloors,
+      state.wallObjects,
+      state.allTrafficZones,
+      graphCacheKey
+    )
+    // A newer edit/reload may have started another build while this worker
+    // request was running. Only the newest graph is allowed to update the UI.
+    if (requestId !== navigationBuildRequestId) return
+    _graph = nextGraph
+    if (_graph !== previousGraph) {
+      invalidateSearchCache()
+    }
+
+    if (!_searchEnhancementsInitialized) {
+      cleanupSearchUi = setupSearchUI(requestRoute).cleanup
+      _searchEnhancementsInitialized = true
+    } else {
+      refreshRecentSearchesUI(requestRoute)
+      updateFavoritesUI()
+    }
+
+    const emptyState = document.getElementById('empty-state')
+    if (emptyState) {
+      emptyState.innerHTML = ''
+    }
+
+    setNavButtonsDisabled(false)
+  }
+
+  /**
+   * Enable or disable the three primary navigation action buttons
+   * (`#find-route-btn`, `#clear-route-btn`, `#find-bathroom-btn`).
+   *
+   * Buttons start disabled on page load and are enabled once
+   * `initializeNavigation` confirms enough nodes have loaded.
+   *
+   * @param disabled - `true` to disable (e.g. while loading), `false` to enable
+   */
+  function setNavButtonsDisabled(disabled: boolean): void {
+    const ids = ['find-route-btn', 'clear-route-btn', 'find-bathroom-btn']
+    for (const id of ids) {
+      const btn = document.getElementById(id) as HTMLButtonElement | null
+      if (btn) btn.disabled = disabled
+    }
+  }
+
+  /**
+   * Display a transient status message in the `#route-status-details` element.
+   *
+   * - `info` / `warning` messages auto-clear after `UI_CONFIG.STATUS_MESSAGE_TIMEOUT_MS`.
+   * - `error` messages persist until overwritten.
+   * - If route-status UI is missing, logs a warning and returns (no blocking dialogs).
+   *
+   * @param message - Text to show the user
+   * @param type    - Severity level; controls colour and auto-clear behaviour
+   */
+  function showStatusMessage(message: string, type: 'info' | 'warning' | 'error' = 'info'): void {
+    const routeStatus = document.getElementById('route-status')
+    const routeStatusDetails = document.getElementById('route-status-details')
+    if (!routeStatus || !routeStatusDetails) {
+      logger.warn('Status message UI not found; dropping message', { message, type })
+      return
+    }
+    routeStatus.classList.remove('hiding')
+    routeStatus.style.display = 'block'
+
+    const colors = {
+      info: 'var(--amber-400)',
+      warning: '#ffca28',
+      error: '#ff6b6b',
+    }
+    routeStatusDetails.style.color = colors[type]
+    routeStatusDetails.textContent = message
+
+    if (type !== 'error') {
+      setTimeout(() => {
+        if (routeStatusDetails.textContent === message) {
+          routeStatusDetails.textContent = ''
+        }
+      }, UI_CONFIG.STATUS_MESSAGE_TIMEOUT_MS)
+    }
+  }
+
+  // ========== WIRE UP CALLBACKS ==========
+
+  setRouteDisplayCallbacks({ switchFloor })
+
+  _initMap({
+    clearRoute,
+    redrawRouteForCurrentFloor,
+    initializeNavigation,
+    createTextParagraph,
+  })
+
+  // Dev tools are lazy-loaded and exposed for local development/preview. A
+  // public deployment still requires PUBLIC_ENABLE_DEV=true and ?dev.
+  const devToolsEnabled =
+    isDevelopmentServer ||
+    isLocalPreview ||
+    (import.meta.env.PUBLIC_ENABLE_DEV === 'true' && urlParams.has('dev'))
+  if (devToolsEnabled) {
+    const { initDevTools, handleMapClick } = await import('../map/dev-tools')
+    initDevTools({
+      getGraph: () => _graph,
+      initializeNavigation,
+      switchFloor,
+      clearRoute,
+      redrawRouteForCurrentFloor,
+    })
+    state.map?.on('click', (e: L.LeafletMouseEvent) => {
+      handleMapClick(e.latlng)
+    })
+  }
+
+  // ========== EVENT LISTENERS ==========
+
+  // Navigation buttons
+  const listenerController = new AbortController()
+  const listenerSignal = listenerController.signal
+  const clearRouteBtn = document.getElementById('clear-route-btn')
+
+  if (clearRouteBtn) clearRouteBtn.addEventListener('click', clearRoute, { signal: listenerSignal })
+
+  const scheduleUi = setupScheduleModal(() => _graph)
+
+  // Floor switcher
+  document.querySelectorAll('.floor-btn').forEach((btn) => {
+    btn.addEventListener(
+      'click',
+      () => {
+        const floorId = btn.getAttribute('data-floor')
+        if (floorId) switchFloor(floorId)
+      },
+      { signal: listenerSignal }
+    )
+  })
+
+  const panelBehavior = setupPanelBehavior()
+  const { collapseForRoute: collapsePanelForRoute } = panelBehavior
+  let requestRoute: () => void = () => undefined
+  const routeActions = setupRouteActions({
+    getGraph: () => _graph,
+    collapsePanel: collapsePanelForRoute,
+    refreshRecent: () => refreshRecentSearchesUI(requestRoute),
+    showStatus: showStatusMessage,
+  })
+  requestRoute = routeActions.findRoute
+
+  // Cleanup on page unload
+  window.addEventListener('beforeunload', () => {
+    for (const m of state.routeMarkers) {
+      if ('__isOutline' in m) {
+        state.map?.removeLayer(m.layer)
+      } else {
+        state.map?.removeLayer(m)
+      }
+    }
+    state.routeMarkers = []
+
+    if (state.currentRoute) {
+      state.map?.removeLayer(state.currentRoute)
+      state.currentRoute = null
+    }
+
+    graphController.terminate()
+    cancelPendingDataLoad()
+    listenerController.abort()
+    cleanupSearchUi?.()
+    scheduleUi.cleanup()
+    routeActions.cleanup()
+    panelBehavior.cleanup()
+
+    logger.log('Cleanup completed')
+  })
+</script>
+
+<style>
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  #map {
+    height: 100dvh;
+    width: 100dvw;
+    background: var(--map-bg);
+    position: relative;
+  }
+
+  /* Route marker overrides */
+  :global(.route-marker) {
+    background: transparent !important;
+    border: none !important;
+  }
+
+  /* Floor Switcher */
+  #floor-switcher {
+    position: fixed;
+    z-index: 1002;
+    display: flex;
+    gap: 6px;
+    background: var(--panel-bg);
+    padding: 4px;
+    border-radius: 12px;
+    box-shadow:
+      0 4px 12px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+
+  /* Mobile: Top left corner */
+  @media (max-width: 767px) {
+    #floor-switcher {
+      top: calc(10px + env(safe-area-inset-top));
+      left: calc(10px + env(safe-area-inset-left));
+    }
+
+    .floor-btn {
+      padding: 13px 16px;
+      font-size: 12px;
+    }
+  }
+
+  /* Desktop: Top left, next to nav panel */
+  @media (min-width: 768px) {
+    #floor-switcher {
+      top: 16px;
+      left: calc(var(--nav-panel-width) + 36px); /* Nav panel width + gap */
+    }
+
+    .floor-btn {
+      padding: 10px 18px;
+      font-size: 13px;
+    }
+  }
+
+  .floor-btn {
+    position: relative;
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    background: var(--panel-surface);
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-family: var(--font-body);
+    transition-property: background-color, color, border-color, box-shadow, transform;
+    transition-duration: var(--duration-normal);
+    transition-timing-function: var(--ease-out);
+    -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+  }
+
+  .floor-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 44px;
+    height: 44px;
+    pointer-events: none;
+  }
+
+  .floor-btn:hover {
+    border-color: var(--amber-500);
+    color: var(--amber-400);
+    background: var(--panel-elevated);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    transform: translateY(-1px);
+  }
+
+  .floor-btn:active {
+    transform: scale(0.96) translateY(0);
+  }
+
+  .floor-btn.active {
+    background: linear-gradient(135deg, var(--amber-500) 0%, var(--amber-600) 100%);
+    color: var(--panel-bg);
+    border-color: var(--amber-500);
+    box-shadow:
+      0 2px 12px var(--amber-glow-strong),
+      0 0 20px rgba(240, 165, 0, 0.2);
+    font-weight: 700;
+  }
+
+  /* Multi-Floor Route Banner */
+  #multi-floor-banner {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1003;
+    background: linear-gradient(135deg, var(--stair-color) 0%, var(--stair-color-dark) 100%);
+    color: white;
+    padding: 12px 20px;
+    border-radius: var(--radius-lg);
+    box-shadow:
+      0 8px 24px rgba(156, 39, 176, 0.5),
+      0 0 40px rgba(156, 39, 176, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    animation: slideDown 0.3s var(--ease-out);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateX(-50%) translateY(-10px);
+      filter: blur(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      filter: blur(0);
+    }
+  }
+
+  @keyframes banner-exit {
+    from {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      filter: blur(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateX(-50%) translateY(-12px);
+      filter: blur(4px);
+    }
+  }
+
+  #multi-floor-banner.hiding {
+    animation: banner-exit 0.12s var(--ease-out) forwards;
+    pointer-events: none;
+  }
+
+  #multi-floor-banner #banner-text {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #multi-floor-banner #banner-text::before {
+    content: '🪜';
+    font-size: 18px;
+  }
+
+  .floor-switch-hint {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition-property: background-color, border-color, transform;
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--ease-out);
+    white-space: nowrap;
+  }
+
+  .floor-switch-hint:hover {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+
+  .floor-switch-hint:active {
+    transform: scale(0.96);
+  }
+
+  @media (max-width: 767px) {
+    #multi-floor-banner {
+      top: calc(60px + env(safe-area-inset-top));
+      font-size: 13px;
+      padding: 10px 16px;
+      max-width: calc(100% - 40px);
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+  }
+
+  button {
+    min-height: 40px;
+    padding: 10px 16px;
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    background: var(--panel-bg);
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-family: var(--font-body);
+    font-size: 12px;
+    transition-property: background-color, color, border-color, transform;
+    transition-duration: var(--duration-normal);
+    transition-timing-function: var(--ease-out);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  button:hover {
+    border-color: var(--amber-500);
+    color: var(--amber-400);
+  }
+
+  button:active {
+    transform: scale(0.96);
+  }
+
+  /* Pulse animation for selected stairway */
+  @keyframes pulse {
+    0%,
+    100% {
+      transform: scale(1);
+      box-shadow: 0 0 12px rgba(255, 69, 0, 0.8);
+    }
+    50% {
+      transform: scale(1.1);
+      box-shadow: 0 0 20px rgba(255, 69, 0, 1);
+    }
+  }
+
+  :global(.stairway-marker-selected) {
+    animation: pulse 1s infinite;
+  }
+</style>
