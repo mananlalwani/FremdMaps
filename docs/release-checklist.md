@@ -7,8 +7,7 @@
       unreachable nodes, and canonical routes.
 - [ ] Run `pnpm run test:e2e`, including the offline service-worker reload scenario.
 - [ ] Confirm the axe accessibility scan in `pnpm run test:e2e` passes.
-- [ ] Confirm the GitHub `production` environment has the required reviewer policy and a
-      `CLOUDFLARE_API_TOKEN` secret before promoting `main`.
+- [ ] Confirm Cloudflare Git integration still deploys `main` to production.
 - [ ] Confirm production security headers from `worker/index.ts` after deployment.
 - [ ] Confirm the service-worker update succeeds and a previously loaded app works while offline.
 - [ ] Confirm public floor-plan exposure remains approved for this release.
