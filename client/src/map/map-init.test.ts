@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { clearMapData } from './map-init'
+import { cancelPendingDataLoad, clearMapData } from './map-init'
 import { state } from './map-state'
 
 vi.mock('../utils/logger', () => ({
@@ -34,6 +34,10 @@ describe('clearMapData', () => {
     state.trafficZoneRects = []
     expect(() => clearMapData()).not.toThrow()
   })
+
+  it('cancels pending data work safely when no request is active', () => {
+    expect(() => cancelPendingDataLoad()).not.toThrow()
+  })
 })
 
 // ── parseNodes ────────────────────────────────────────────────────────────────
@@ -66,6 +70,7 @@ describe('parseNodes', () => {
         lat: -100,
         lng: 500,
         rooms: ['Stair A'],
+        searchAliases: ['Escalera A'],
         type: 'stairway',
         connectsTo: ['Stair B'],
         category: 'stairway',
@@ -73,6 +78,7 @@ describe('parseNodes', () => {
     ]
     const result = parseNodes(input, '1', 'test')
     expect(result[0].connectsTo).toEqual(['Stair B'])
+    expect(result[0].searchAliases).toEqual(['Escalera A'])
     expect(result[0].category).toBe('stairway')
   })
 
@@ -158,6 +164,17 @@ describe('parseNodes', () => {
         'test'
       )
     ).toThrow('connectsTo')
+  })
+
+  it('throws when searchAliases is not an array', async () => {
+    const parseNodes = await getParser()
+    expect(() =>
+      parseNodes(
+        [{ uid: 'n1', lat: -100, lng: 0, rooms: ['R'], searchAliases: 'not-an-array' }],
+        '1',
+        'test'
+      )
+    ).toThrow('searchAliases')
   })
 
   it('throws when node UIDs are duplicated on a floor', async () => {
@@ -481,6 +498,42 @@ describe('loadAllFloorsNavigationData', () => {
 
     vi.unstubAllGlobals()
   })
+
+  it('builds complete global data when every floor response succeeds', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.endsWith('/nodes.json')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve([{ uid: url, lat: -100, lng: 0, rooms: ['101'] }]),
+          })
+        }
+        if (url.endsWith('/walls.json')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve([
+                [
+                  [-100, 0],
+                  [-100, 100],
+                ],
+              ]),
+          })
+        }
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) })
+      })
+    )
+
+    const { loadAllFloorsNavigationData } = await import('./map-init')
+    await loadAllFloorsNavigationData()
+
+    expect(state.hasLoadedGlobalNavigationData).toBe(true)
+    expect(state.allNodesAllFloors).toHaveLength(2)
+    expect(state.wallObjects.map((wall) => wall.floor)).toEqual(['1', '2'])
+  })
 })
 
 // ── loadData race safety ───────────────────────────────────────────────────────
@@ -564,6 +617,25 @@ describe('loadAllNodesAllFloors', () => {
 
     vi.unstubAllGlobals()
   })
+
+  it('loads and tags nodes from every configured floor', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        const floor = url.includes('floor1') ? '1' : '2'
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve([{ uid: `room-${floor}`, lat: -100, lng: 0, rooms: ['101'] }]),
+        })
+      })
+    )
+
+    const { loadAllNodesAllFloors } = await import('./map-init')
+    const result = await loadAllNodesAllFloors()
+
+    expect(result.map((node) => node.floor)).toEqual(['1', '2'])
+  })
 })
 
 // ── loadAllFloorsWalls ────────────────────────────────────────────────────────
@@ -583,6 +655,30 @@ describe('loadAllFloorsWalls', () => {
 
     vi.unstubAllGlobals()
   })
+
+  it('loads wall segments and assigns their source floor', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              [
+                [-100, 0],
+                [-100, 100],
+              ],
+            ]),
+        })
+      )
+    )
+
+    const { loadAllFloorsWalls } = await import('./map-init')
+    const result = await loadAllFloorsWalls()
+
+    expect(result).toHaveLength(2)
+    expect(result.map((wall) => wall.floor)).toEqual(['1', '2'])
+  })
 })
 
 // ── loadAllFloorsZones ────────────────────────────────────────────────────────
@@ -601,5 +697,31 @@ describe('loadAllFloorsZones', () => {
     expect(result).toEqual([])
 
     vi.unstubAllGlobals()
+  })
+
+  it('loads zones from every configured floor', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        const floor = url.includes('floor1') ? '1' : '2'
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                uid: `zone-${floor}`,
+                floor,
+                bounds: { minLat: -100, minLng: 0, maxLat: -50, maxLng: 100 },
+                intensity: 1.5,
+              },
+            ]),
+        })
+      })
+    )
+
+    const { loadAllFloorsZones } = await import('./map-init')
+    const result = await loadAllFloorsZones()
+
+    expect(result.map((zone) => zone.floor)).toEqual(['1', '2'])
   })
 })

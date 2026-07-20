@@ -229,6 +229,7 @@ function refreshAll(): void {
     el.innerHTML = builder()
   }
   refreshZoneList()
+  overlayControls?.refresh()
 }
 
 /** Refresh live values and any enabled Leaflet overlays after a floor-data change. */

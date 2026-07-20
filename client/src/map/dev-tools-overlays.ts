@@ -1,5 +1,6 @@
 import L from 'leaflet'
 import { state } from './map-state'
+import type { Graph } from '../utils/types'
 
 export interface DevOverlayControls {
   element: HTMLElement
@@ -12,6 +13,10 @@ interface RouteControls {
   redrawRouteForCurrentFloor(): void
 }
 
+interface GraphControls extends RouteControls {
+  getGraph(): Graph | null
+}
+
 const NODE_COLORS: Record<string, string> = {
   room: '#4ade80',
   waypoint: '#6b7280',
@@ -20,13 +25,15 @@ const NODE_COLORS: Record<string, string> = {
 }
 
 /** Create independent Leaflet overlay controls for the lazy-loaded developer menu. */
-export function createDevOverlayControls(routeControls: RouteControls): DevOverlayControls {
+export function createDevOverlayControls(routeControls: GraphControls): DevOverlayControls {
   let zoneLayerGroup: L.LayerGroup | null = null
   let wallLayerGroup: L.LayerGroup | null = null
   let nodeLayerGroup: L.LayerGroup | null = null
+  let graphLayerGroup: L.LayerGroup | null = null
   let zonesVisible = false
   let wallsVisible = false
   let nodesVisible = false
+  let graphVisible = false
 
   const removeLayers = (layerGroup: L.LayerGroup | null): null => {
     if (layerGroup && state.map) state.map.removeLayer(layerGroup)
@@ -99,6 +106,47 @@ export function createDevOverlayControls(routeControls: RouteControls): DevOverl
     }
   }
 
+  /** Draw same-floor graph edges as one multi-polyline to keep large graphs inspectable. */
+  const renderGraph = (): void => {
+    if (!state.map) return
+    graphLayerGroup = removeLayers(graphLayerGroup)
+    const graph = routeControls.getGraph()
+    if (!graph?.size) return
+
+    const nodes =
+      state.allNodesAllFloors.length > 0 ? state.allNodesAllFloors : state.collectedNodes
+    const nodesByUid = new Map(nodes.map((node) => [node.uid, node]))
+    const edges: L.LatLngExpression[][] = []
+    const seen = new Set<string>()
+
+    for (const source of nodes) {
+      if (source.floor !== state.currentFloor) continue
+      for (const edge of graph.get(source.uid) ?? []) {
+        const target = nodesByUid.get(edge.to)
+        if (target?.floor !== state.currentFloor) continue
+        const edgeKey = [source.uid, target.uid].sort().join(':')
+        if (seen.has(edgeKey)) continue
+        seen.add(edgeKey)
+        edges.push([
+          [source.lat, source.lng],
+          [target.lat, target.lng],
+        ])
+      }
+    }
+
+    graphLayerGroup = L.layerGroup().addTo(state.map)
+    if (edges.length > 0) {
+      graphLayerGroup.addLayer(
+        L.polyline(edges, {
+          color: '#22d3ee',
+          weight: 1,
+          opacity: 0.38,
+          interactive: false,
+        })
+      )
+    }
+  }
+
   const control = document.createElement('div')
   Object.assign(control.style, { display: 'flex', flexDirection: 'column', gap: '3px' })
   control.appendChild(
@@ -123,6 +171,13 @@ export function createDevOverlayControls(routeControls: RouteControls): DevOverl
     })
   )
   control.appendChild(
+    toggle('Graph edges', false, (enabled) => {
+      graphVisible = enabled
+      graphLayerGroup = enabled ? graphLayerGroup : removeLayers(graphLayerGroup)
+      if (enabled) renderGraph()
+    })
+  )
+  control.appendChild(
     toggle('Route', state.currentRoute !== null, (enabled) => {
       if (enabled && state.currentRouteFullPath.length > 0)
         routeControls.redrawRouteForCurrentFloor()
@@ -136,14 +191,17 @@ export function createDevOverlayControls(routeControls: RouteControls): DevOverl
       if (zonesVisible) renderZones()
       if (wallsVisible) renderWalls()
       if (nodesVisible) renderNodes()
+      if (graphVisible) renderGraph()
     },
     dispose(): void {
       zoneLayerGroup = removeLayers(zoneLayerGroup)
       wallLayerGroup = removeLayers(wallLayerGroup)
       nodeLayerGroup = removeLayers(nodeLayerGroup)
+      graphLayerGroup = removeLayers(graphLayerGroup)
       zonesVisible = false
       wallsVisible = false
       nodesVisible = false
+      graphVisible = false
     },
   }
 }
