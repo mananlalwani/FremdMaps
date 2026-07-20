@@ -56,4 +56,4 @@ const observer = new MutationObserver(() => {
     observer.disconnect()
   }
 })
-if (overlay) observer.observe(overlay, { childList: false, subtree: false })
+if (overlay) observer.observe(document.body, { childList: true, subtree: true })
