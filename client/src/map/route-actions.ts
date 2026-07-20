@@ -1,6 +1,7 @@
 /** Route and bathroom actions wired to the navigation panel buttons. */
 
 import { findNearestBathroom, findPath } from '../utils/pathfinding'
+import { t } from '../utils/i18n'
 import { searchNodes } from '../utils/search'
 import { SEARCH_CONFIG } from '../config/featured'
 import { addRecentSearch } from '../utils/storage'
@@ -59,14 +60,13 @@ export function setupRouteActions(options: RouteActionOptions): {
     if (!startInput || !endInput) return
     const startText = startInput.value.trim()
     const endText = endInput.value.trim()
-    if (!startText || !endText)
-      return options.showStatus('Enter both a starting point and a destination', 'warning')
+    if (!startText || !endText) return options.showStatus(t('route.missingLocations'), 'warning')
     const graph = options.getGraph()
-    if (!graph) return options.showStatus('Map not ready yet — please wait a moment', 'warning')
+    if (!graph) return options.showStatus(t('route.mapLoading'), 'warning')
     const start = resolveRoom(startText, state.selectedStartNode?.uid ?? null)
     const endCandidates = resolveRoomCandidates(endText, state.selectedEndNode?.uid ?? null)
     if (!start || endCandidates.length === 0)
-      return options.showStatus('One or both locations could not be found.', 'error')
+      return options.showStatus(t('route.locationsNotFound'), 'error')
 
     // A destination name can exist on more than one floor (for example,
     // Auditorium). Prefer a reachable endpoint on the starting floor; only
@@ -89,8 +89,7 @@ export function setupRouteActions(options: RouteActionOptions): {
     const otherFloorCandidates = endCandidates.filter((end) => end.floor !== start.floor)
     const bestResult =
       findShortestReachable(sameFloorCandidates) ?? findShortestReachable(otherFloorCandidates)
-    if (bestResult === null)
-      return options.showStatus('No path found between these locations.', 'error')
+    if (bestResult === null) return options.showStatus(t('route.noPath'), 'error')
     addRecentSearch(startText, endText)
     options.refreshRecent()
     displayRoute(bestResult.path, bestResult.distance)
@@ -100,16 +99,15 @@ export function setupRouteActions(options: RouteActionOptions): {
   const findBathroom = (): void => {
     const startInput = document.getElementById('start-input') as HTMLInputElement | null
     const startText = startInput?.value.trim() ?? ''
-    if (!startText) return options.showStatus('Enter your starting location first', 'warning')
+    if (!startText) return options.showStatus(t('route.missingStart'), 'warning')
     const graph = options.getGraph()
-    if (!graph) return options.showStatus('Map not ready yet — please wait a moment', 'warning')
+    if (!graph) return options.showStatus(t('route.mapLoading'), 'warning')
     const start = resolveRoom(startText, state.selectedStartNode?.uid ?? null)
-    if (!start) return options.showStatus(`Room "${startText}" not found`, 'error')
+    if (!start) return options.showStatus(t('route.roomNotFound', { room: startText }), 'error')
     const bathroom = findNearestBathroom(start, state.allNodesAllFloors, graph)
-    if (!bathroom) return options.showStatus('No reachable bathrooms found', 'error')
+    if (!bathroom) return options.showStatus(t('route.noBathrooms'), 'error')
     const result = findPath(start.uid, bathroom.uid, state.allNodesAllFloors, graph)
-    if (!result.found)
-      return options.showStatus('Could not find a path to the nearest bathroom.', 'error')
+    if (!result.found) return options.showStatus(t('route.noBathroomPath'), 'error')
     displayRoute(result.path, result.distance)
     options.collapsePanel()
   }

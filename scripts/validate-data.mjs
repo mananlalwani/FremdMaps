@@ -102,6 +102,15 @@ function validateNodes(floorId, nodes) {
       assertString(n.rooms[r], `${label}.rooms[${r}]`)
     }
 
+    if (n.searchAliases !== undefined) {
+      if (!Array.isArray(n.searchAliases)) {
+        fail(`${label}.searchAliases must be an array when present`)
+      }
+      for (let a = 0; a < n.searchAliases.length; a += 1) {
+        assertString(n.searchAliases[a], `${label}.searchAliases[${a}]`)
+      }
+    }
+
     assertFiniteNumber(n.lat, `${label}.lat`)
     assertFiniteNumber(n.lng, `${label}.lng`)
     assertMapBounds(n.lat, n.lng, label)

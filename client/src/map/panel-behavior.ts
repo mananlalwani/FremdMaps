@@ -4,6 +4,8 @@
  * Keeps mobile panel state and virtual-keyboard avoidance out of Map.astro.
  */
 
+import { t } from '../utils/i18n'
+
 type PanelState = 'normal' | 'expanded' | 'minimized'
 
 export interface PanelBehavior {
@@ -14,8 +16,23 @@ export interface PanelBehavior {
 export function setupPanelBehavior(): PanelBehavior {
   const navPanel = document.getElementById('nav-panel')
   const panelHandle = document.getElementById('panel-handle')
+  const panelHandleLabel = document.getElementById('panel-handle-label')
   let panelState: PanelState = 'normal'
   const controller = new AbortController()
+
+  const updatePanelHandleCopy = (): void => {
+    const isExpanded = panelState === 'expanded'
+    panelHandle?.setAttribute('aria-label', t(isExpanded ? 'panel.collapse' : 'panel.expand'))
+    if (panelHandleLabel) {
+      panelHandleLabel.textContent = t(
+        isExpanded
+          ? 'panel.tapCollapse'
+          : panelState === 'minimized'
+            ? 'panel.tapOpen'
+            : 'panel.tapExpand'
+      )
+    }
+  }
 
   const setPanelState = (nextState: Exclude<PanelState, 'normal'>): void => {
     if (!navPanel) return
@@ -24,11 +41,12 @@ export function setupPanelBehavior(): PanelBehavior {
     navPanel.classList.toggle('panel-minimized', !isExpanded)
     panelState = nextState
     panelHandle?.setAttribute('aria-expanded', String(isExpanded))
-    panelHandle?.setAttribute(
-      'aria-label',
-      isExpanded ? 'Collapse navigation panel' : 'Expand navigation panel'
-    )
+    updatePanelHandleCopy()
   }
+
+  window.addEventListener('fremdmaps:locale-change', updatePanelHandleCopy, {
+    signal: controller.signal,
+  })
 
   const collapseForRoute = (): void => {
     if (!navPanel || window.innerWidth >= 768) return

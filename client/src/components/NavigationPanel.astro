@@ -39,25 +39,40 @@ import '../styles/navigation-utilities.css'
     class="panel-handle"
     type="button"
     aria-label="Expand navigation panel"
+    data-i18n-aria-label="panel.expand"
     aria-controls="nav-panel"
     aria-expanded="false"
   >
     <div class="handle-bar"></div>
+    <span id="panel-handle-label" class="panel-handle-label" data-i18n="panel.tapExpand">
+      Tap to expand
+    </span>
   </button>
 
   <div class="panel-header">
     <div class="header-top">
       <div class="header-title-group">
-        <h2 id="nav-panel-title">Fremd Maps</h2>
+        <h2 id="nav-panel-title" data-i18n="app.name">Fremd Maps</h2>
       </div>
       <div class="header-actions">
+        <select
+          id="language-select"
+          class="language-select"
+          aria-label="Language"
+          data-i18n-aria-label="language.label"
+        >
+          <option value="en" data-i18n="language.english">English</option>
+          <option value="es" data-i18n="language.spanish">Español</option>
+        </select>
         <!-- Clock button — toggles #recent-dropdown. search-ui.ts applies
              .has-items for the history badge and .active while open. -->
         <button
           id="recent-toggle-btn"
           class="header-icon-btn"
           aria-label="Recent searches"
+          data-i18n-aria-label="panel.recent"
           title="Recent searches"
+          data-i18n-title="panel.recent"
         >
           <svg
             width="16"
@@ -81,8 +96,8 @@ import '../styles/navigation-utilities.css'
        #clear-recent-btn, and requests a route when a history item is selected. -->
   <div id="recent-dropdown" class="recent-dropdown" style="display: none;">
     <div class="recent-dropdown-header">
-      <span class="recent-dropdown-title">Recent</span>
-      <button id="clear-recent-btn" class="clear-button">Clear</button>
+      <span class="recent-dropdown-title" data-i18n="search.recent">Recent</span>
+      <button id="clear-recent-btn" class="clear-button" data-i18n="search.clear">Clear</button>
     </div>
     <div id="recent-list" class="recent-dropdown-list">
       <!-- Populated by search-ui.ts -->
@@ -105,11 +120,12 @@ import '../styles/navigation-utilities.css'
        [data-results-list] inside the panel is where search results are rendered
        by search-ui.ts. -->
   <div class="input-group">
-    <label for="start-input">Start</label>
+    <label for="start-input" data-i18n="search.start">Start</label>
     <input
       type="text"
       id="start-input"
       placeholder="Room number or name"
+      data-i18n-placeholder="search.placeholder"
       autocomplete="off"
       data-search-input="start"
       role="combobox"
@@ -140,11 +156,12 @@ import '../styles/navigation-utilities.css'
   <!-- Destination search field; search-ui.ts writes the selected node to
        state.selectedEndNode unless the result represents a shared destination. -->
   <div class="input-group">
-    <label for="end-input">Destination</label>
+    <label for="end-input" data-i18n="search.destination">Destination</label>
     <input
       type="text"
       id="end-input"
       placeholder="Room number or name"
+      data-i18n-placeholder="search.placeholder"
       autocomplete="off"
       data-search-input="end"
       role="combobox"
@@ -176,14 +193,18 @@ import '../styles/navigation-utilities.css'
        #find-route-btn  → route-actions.ts (disabled until nodes load)
        #clear-route-btn → clearRoute() from route-display.ts. -->
   <div class="button-group">
-    <button id="find-route-btn" class="primary">Go</button>
-    <button id="clear-route-btn" class="secondary">Clear</button>
+    <button id="find-route-btn" class="primary" data-i18n="route.go">Go</button>
+    <button id="clear-route-btn" class="secondary" data-i18n="route.clear">Clear</button>
   </div>
 
   <!-- Quick-action secondary buttons owned by route-actions.ts and schedule-ui.ts. -->
   <div class="quick-actions">
-    <button id="find-bathroom-btn" class="quick-action-btn">Find Bathroom</button>
-    <button id="schedule-btn" class="quick-action-btn"> My Schedule </button>
+    <button id="find-bathroom-btn" class="quick-action-btn" data-i18n="route.bathroom"
+      >Find Bathroom</button
+    >
+    <button id="schedule-btn" class="quick-action-btn" data-i18n="route.schedule"
+      >My Schedule</button
+    >
   </div>
 
   <!-- Route status area — hidden until a route is active.
@@ -191,9 +212,17 @@ import '../styles/navigation-utilities.css'
        #directions-list is populated by route-display.ts with
        <li class="direction-step"> elements. -->
   <div id="route-status" style="display: none;" aria-live="polite" aria-atomic="true">
-    <p id="route-status-details" class="status-line">Follow the amber path on the map</p>
+    <p id="route-status-details" class="status-line" data-i18n="route.follow">
+      Follow the amber path on the map
+    </p>
     <!-- Turn-by-turn directions populated by route-display.ts -->
-    <ol id="directions-list" role="list" aria-label="Turn-by-turn directions"></ol>
+    <ol
+      id="directions-list"
+      role="list"
+      aria-label="Turn-by-turn directions"
+      data-i18n-aria-label="route.directions"
+    >
+    </ol>
   </div>
 
   <!-- Empty state placeholder — cleared (innerHTML = '') by initializeNavigation()
@@ -213,6 +242,7 @@ import '../styles/navigation-utilities.css'
   aria-modal="true"
   role="dialog"
   aria-label="My Schedule"
+  data-i18n-aria-label="schedule.label"
 >
   <div class="schedule-modal-inner dot-grid-bg">
     <!-- Paths view (default) — shows consecutive-period route cards.
@@ -222,12 +252,13 @@ import '../styles/navigation-utilities.css'
     <div id="schedule-view-paths">
       <div class="schedule-modal-header">
         <div class="schedule-modal-title-row">
-          <span class="schedule-modal-label">My Schedule</span>
+          <span class="schedule-modal-label" data-i18n="schedule.label">My Schedule</span>
           <div class="schedule-header-btns">
             <button
               id="schedule-edit-btn"
               class="schedule-header-action-btn"
               aria-label="Edit schedule"
+              data-i18n-aria-label="schedule.edit"
             >
               <svg
                 width="13"
@@ -242,9 +273,14 @@ import '../styles/navigation-utilities.css'
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
               </svg>
-              Edit
+              <span data-i18n="schedule.edit">Edit schedule</span>
             </button>
-            <button id="schedule-close-btn" class="schedule-close-btn" aria-label="Close schedule">
+            <button
+              id="schedule-close-btn"
+              class="schedule-close-btn"
+              aria-label="Close schedule"
+              data-i18n-aria-label="schedule.close"
+            >
               <svg
                 width="14"
                 height="14"
@@ -261,7 +297,9 @@ import '../styles/navigation-utilities.css'
             </button>
           </div>
         </div>
-        <p class="schedule-modal-subtitle">Tap a route to navigate it.</p>
+        <p class="schedule-modal-subtitle" data-i18n="schedule.subtitlePaths">
+          Tap a route to navigate it.
+        </p>
       </div>
       <div id="schedule-paths-list" class="schedule-paths-list">
         <!-- Populated by renderPaths() in schedule-ui.ts -->
@@ -282,6 +320,7 @@ import '../styles/navigation-utilities.css'
             id="schedule-back-btn"
             class="schedule-header-action-btn"
             aria-label="Back to paths view"
+            data-i18n-aria-label="schedule.back"
           >
             <svg
               width="13"
@@ -296,12 +335,13 @@ import '../styles/navigation-utilities.css'
               <line x1="19" y1="12" x2="5" y2="12"></line>
               <polyline points="12 19 5 12 12 5"></polyline>
             </svg>
-            Back
+            <span data-i18n="schedule.back">Back to paths view</span>
           </button>
           <button
             id="schedule-edit-close-btn"
             class="schedule-close-btn"
             aria-label="Close schedule"
+            data-i18n-aria-label="schedule.close"
           >
             <svg
               width="14"
@@ -318,13 +358,17 @@ import '../styles/navigation-utilities.css'
             </svg>
           </button>
         </div>
-        <p class="schedule-modal-subtitle">Set a room for each period.</p>
+        <p class="schedule-modal-subtitle" data-i18n="schedule.subtitleEdit">
+          Set a room for each period.
+        </p>
       </div>
       <div id="schedule-periods-list" class="schedule-periods-list">
         <!-- Populated by renderSchedulePeriods() in Map.astro -->
       </div>
       <div class="schedule-modal-footer">
-        <button id="schedule-save-btn" class="primary schedule-save-btn">Save</button>
+        <button id="schedule-save-btn" class="primary schedule-save-btn" data-i18n="schedule.save"
+          >Save schedule</button
+        >
       </div>
     </div>
   </div>

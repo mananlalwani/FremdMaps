@@ -11,6 +11,7 @@
 import L from 'leaflet'
 import { simplifyPath } from '../utils/geometry'
 import { buildDirectionSteps } from '../utils/directions'
+import { t } from '../utils/i18n'
 import type { Node } from '../utils/types'
 import { MAP_CONFIG, UI_CONFIG } from '../utils/constants'
 import { routeLogger } from '../utils/logger'
@@ -45,6 +46,14 @@ export function setRouteDisplayCallbacks(callbacks: RouteDisplayCallbacks): void
   _cb = callbacks
 }
 
+function updateRouteStatus(path: Node[]): void {
+  const statusDetails = document.getElementById('route-status-details')
+  if (!statusDetails) return
+  const floorCount = new Set(path.map((node) => node.floor).filter(Boolean)).size
+  statusDetails.textContent =
+    floorCount > 1 ? t('route.followMulti', { floors: floorCount }) : t('route.follow')
+}
+
 /**
  * Display a found route on the map.
  * Stores the full path for multi-floor redraws, then calls
@@ -75,7 +84,6 @@ export function displayRoute(path: Node[], _totalDistance: number): void {
 
   const routeStatus = document.getElementById('route-status')
   const emptyState = document.getElementById('empty-state')
-  const statusDetails = document.getElementById('route-status-details')
 
   if (routeStatus) {
     routeStatus.classList.remove('hiding')
@@ -83,16 +91,16 @@ export function displayRoute(path: Node[], _totalDistance: number): void {
   }
   if (emptyState) emptyState.style.display = 'none'
 
-  if (statusDetails) {
-    if (isMultiFloor) {
-      statusDetails.textContent = `${floors.length} floors • Follow the amber path`
-    } else {
-      statusDetails.textContent = 'Follow the amber path on the map'
-    }
-  }
+  updateRouteStatus(path)
 
   generateDirections(path, state.currentFloor)
 }
+
+window.addEventListener('fremdmaps:locale-change', () => {
+  if (state.currentRouteFullPath.length === 0) return
+  updateRouteStatus(state.currentRouteFullPath)
+  generateDirections(state.currentRouteFullPath, state.currentFloor)
+})
 
 /**
  * Re-render the stored route for whichever floor is currently active.

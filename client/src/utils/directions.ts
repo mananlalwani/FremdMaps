@@ -11,6 +11,7 @@
 
 import { simplifyPath, distance } from './geometry'
 import { MAP_CONFIG } from './constants'
+import { t } from './i18n'
 import type { DirectionStep, Node, WalkTurn, Wall } from './types'
 
 /**
@@ -68,14 +69,14 @@ function turnPhrase(turnDeg: number): WalkInstruction {
   const abs = Math.abs(turnDeg)
 
   if (abs <= COLLINEAR_THRESHOLD) {
-    return { label: 'Continue straight', turn: 'straight' }
+    return { label: t('direction.continue'), turn: 'straight' }
   }
   if (abs <= 135) {
     return turnDeg > 0
-      ? { label: 'Turn right', turn: 'right' }
-      : { label: 'Turn left', turn: 'left' }
+      ? { label: t('direction.right'), turn: 'right' }
+      : { label: t('direction.left'), turn: 'left' }
   }
-  return { label: 'Turn around', turn: 'u-turn' }
+  return { label: t('direction.around'), turn: 'u-turn' }
 }
 
 /**
@@ -90,18 +91,18 @@ export function relativeWalkInstruction(
 ): WalkInstruction {
   if (afterStairs) {
     if (fromBearing === null) {
-      return { label: 'Exit the stairs and continue', turn: 'straight' }
+      return { label: t('direction.exitStairs'), turn: 'straight' }
     }
     const base = turnPhrase(signedTurnDegrees(fromBearing, toBearing))
     if (base.turn === 'straight') {
-      return { label: 'Exit the stairs and continue', turn: 'straight' }
+      return { label: t('direction.exitStairs'), turn: 'straight' }
     }
     const rest = base.label.charAt(0).toLowerCase() + base.label.slice(1)
-    return { label: `Exit the stairs and ${rest}`, turn: base.turn }
+    return { label: t('direction.exitStairsTurn', { direction: rest }), turn: base.turn }
   }
 
   if (fromBearing === null) {
-    return { label: 'Continue straight', turn: 'straight' }
+    return { label: t('direction.continue'), turn: 'straight' }
   }
 
   return turnPhrase(signedTurnDegrees(fromBearing, toBearing))
@@ -126,19 +127,19 @@ export function landmarkName(node: Node): string | null {
   return null
 }
 
-function stairDisplayName(node: Node): string {
+function stairDisplayName(node: Node): string | null {
   const fromRooms = landmarkName(node)
   if (fromRooms) return `Stairs ${fromRooms}`
   const portal = node.connectsTo?.find((c) => c.trim())
   if (portal) return `Stairs ${portal.trim()}`
-  return 'the stairs'
+  return null
 }
 
 function withLandmark(label: string, turn: WalkTurn, atNode: Node | null): string {
   if (!atNode || atNode.type === 'stairway' || turn === 'straight') return label
   const name = landmarkName(atNode)
   if (!name) return label
-  return `${label} toward ${name}`
+  return t('direction.toward', { direction: label, place: name })
 }
 
 function isNumberedRoom(node: Node): boolean {
@@ -202,13 +203,19 @@ export function buildDirectionSteps(path: Node[], walls: readonly Wall[] = []): 
   const steps: DirectionStep[] = []
 
   const startNode = route[0]
-  const startLabel = landmarkName(startNode) ?? 'Starting point'
-  steps.push({ type: 'start', label: `Start at ${startLabel}`, floor: startNode.floor ?? '' })
+  const startLabel = landmarkName(startNode) ?? t('direction.startingPoint')
+  steps.push({
+    type: 'start',
+    label: t('direction.start', { place: startLabel }),
+    floor: startNode.floor ?? '',
+  })
 
   if (route.length === 1) {
     steps.push({
       type: 'end',
-      label: `Arrive at ${landmarkName(startNode) ?? 'Destination'}`,
+      label: t('direction.arrive', {
+        place: landmarkName(startNode) ?? t('direction.destination'),
+      }),
       floor: startNode.floor ?? '',
     })
     return steps
@@ -294,10 +301,11 @@ export function buildDirectionSteps(path: Node[], walls: readonly Wall[] = []): 
       afterStairs = true
 
       const stairName = stairDisplayName(node)
-      const takeVerb = stairName === 'the stairs' ? 'Take the stairs' : `Take ${stairName}`
       steps.push({
         type: 'stair',
-        label: `${takeVerb} to Floor ${nextNode.floor}`,
+        label: stairName
+          ? t('direction.takeNamedStairs', { stairs: stairName, floor: nextNode.floor ?? '' })
+          : t('direction.takeStairs', { floor: nextNode.floor ?? '' }),
         floor: node.floor ?? '',
         targetFloor: nextNode.floor,
       })
@@ -312,7 +320,7 @@ export function buildDirectionSteps(path: Node[], walls: readonly Wall[] = []): 
   const endNode = route[route.length - 1]
   steps.push({
     type: 'end',
-    label: `Arrive at ${landmarkName(endNode) ?? 'Destination'}`,
+    label: t('direction.arrive', { place: landmarkName(endNode) ?? t('direction.destination') }),
     floor: endNode.floor ?? '',
   })
 

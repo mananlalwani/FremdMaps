@@ -1,7 +1,14 @@
+import { applyTranslations, getLocale, setLocale } from '../utils/i18n'
+
 const STORAGE_KEY = 'wayfinder_onboarded'
 
 const overlay = document.getElementById('onboarding-overlay')
 const dismissBtn = document.getElementById('onboarding-dismiss') as HTMLButtonElement | null
+const languageSelect = document.getElementById(
+  'onboarding-language-select'
+) as HTMLSelectElement | null
+
+if (languageSelect) languageSelect.value = getLocale()
 
 const hasCompletedOnboarding = (): boolean => {
   try {
@@ -22,13 +29,29 @@ const markOnboardingComplete = (): void => {
 if (hasCompletedOnboarding()) {
   overlay?.remove()
 } else {
-  dismissBtn?.focus()
+  languageSelect?.focus()
 }
 
 overlay?.addEventListener('keydown', (event) => {
   if (event.key !== 'Tab' || !overlay.isConnected) return
-  event.preventDefault()
-  dismissBtn?.focus()
+  if (!languageSelect || !dismissBtn) return
+  if (event.shiftKey && document.activeElement === languageSelect) {
+    event.preventDefault()
+    dismissBtn.focus()
+  } else if (!event.shiftKey && document.activeElement === dismissBtn) {
+    event.preventDefault()
+    languageSelect.focus()
+  }
+})
+
+languageSelect?.addEventListener('change', () => {
+  const locale = languageSelect.value === 'es' ? 'es' : 'en'
+  setLocale(locale)
+  applyTranslations()
+  const headerLanguageSelect = document.getElementById(
+    'language-select'
+  ) as HTMLSelectElement | null
+  if (headerLanguageSelect) headerLanguageSelect.value = locale
 })
 
 dismissBtn?.addEventListener('click', () => {

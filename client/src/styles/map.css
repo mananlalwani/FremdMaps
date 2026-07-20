@@ -26,6 +26,8 @@
 /* Floor Switcher */
 #floor-switcher {
   position: fixed;
+  top: calc(10px + env(safe-area-inset-top));
+  left: calc(10px + env(safe-area-inset-left));
   z-index: 1002;
   display: flex;
   gap: 6px;
@@ -37,20 +39,13 @@
     0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-/* Mobile: Top left corner */
-@media (max-width: 767px) {
-  #floor-switcher {
-    top: calc(10px + env(safe-area-inset-top));
-    left: calc(10px + env(safe-area-inset-left));
-  }
-
-  #floor-switcher .floor-btn {
-    padding: 13px 16px;
-    font-size: 12px;
-  }
+#floor-switcher .floor-btn {
+  min-height: 44px;
+  padding: 12px 16px;
+  font-size: 12px;
 }
 
-/* Desktop: Top left, next to nav panel */
+/* Larger screens: position beside the navigation sidebar. */
 @media (min-width: 768px) {
   #floor-switcher {
     top: 16px;
@@ -115,13 +110,13 @@
 /* Multi-Floor Route Banner */
 #multi-floor-banner {
   position: fixed;
-  top: 70px;
+  top: calc(60px + env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
   z-index: 1003;
   background: linear-gradient(135deg, var(--stair-color) 0%, var(--stair-color-dark) 100%);
   color: white;
-  padding: 12px 20px;
+  padding: 10px 16px;
   border-radius: var(--radius-lg);
   box-shadow:
     0 8px 24px rgba(156, 39, 176, 0.5),
@@ -129,8 +124,11 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
+  max-width: calc(100% - 40px);
+  flex-wrap: wrap;
+  justify-content: center;
   animation: map-banner-enter 0.3s var(--ease-out);
 }
 
@@ -200,42 +198,15 @@
   transform: scale(0.96);
 }
 
-@media (max-width: 767px) {
+@media (min-width: 768px) {
   #multi-floor-banner {
-    top: calc(60px + env(safe-area-inset-top));
-    font-size: 13px;
-    padding: 10px 16px;
-    max-width: calc(100% - 40px);
-    flex-wrap: wrap;
-    justify-content: center;
+    top: 70px;
+    font-size: 14px;
+    padding: 12px 20px;
+    max-width: none;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
   }
-}
-
-#floor-switcher button {
-  min-height: 40px;
-  padding: 10px 16px;
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  background: var(--panel-bg);
-  color: var(--text-secondary);
-  font-weight: 600;
-  font-family: var(--font-body);
-  font-size: 12px;
-  transition-property: background-color, color, border-color, transform;
-  transition-duration: var(--duration-normal);
-  transition-timing-function: var(--ease-out);
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-#floor-switcher button:hover {
-  border-color: var(--amber-500);
-  color: var(--amber-400);
-}
-
-#floor-switcher button:active {
-  transform: scale(0.96);
 }
 
 /* Pulse animation for selected stairway */

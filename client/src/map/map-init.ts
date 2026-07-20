@@ -15,6 +15,7 @@
 
 import L from 'leaflet'
 import { convertWallData } from '../utils/geometry'
+import { t } from '../utils/i18n'
 import type { Node, Wall, TrafficZone } from '../utils/types'
 import { MAP_CONFIG, FLOORS, getDataUrl } from '../utils/constants'
 import { graphLogger, logger } from '../utils/logger'
@@ -109,6 +110,15 @@ export function parseNodes(value: unknown, floorId: string, contextLabel: string
     const node: Node = { uid, lat, lng, rooms, floor: floorId }
 
     if (type !== undefined) node.type = type
+
+    if (rawNode.searchAliases !== undefined) {
+      if (!Array.isArray(rawNode.searchAliases)) {
+        throw new Error(`${label}.searchAliases must be an array when present`)
+      }
+      node.searchAliases = rawNode.searchAliases.map((alias, aliasIndex) =>
+        assertNonEmptyString(alias, `${label}.searchAliases[${aliasIndex}]`)
+      )
+    }
 
     if (rawNode.connectsTo !== undefined) {
       if (!Array.isArray(rawNode.connectsTo)) {
@@ -507,7 +517,7 @@ export function switchFloor(floorId: string): void {
   }
 
   const floorLabel = document.querySelector('.floor-label')
-  if (floorLabel) floorLabel.textContent = `Floor ${floorId}`
+  if (floorLabel) floorLabel.textContent = t('floor.label', { floor: floorId })
 
   void loadData()
 

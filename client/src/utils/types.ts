@@ -34,6 +34,8 @@ export interface Node {
    * `['201', '201A']` or `['A']` for a stairway).
    */
   rooms: string[]
+  /** Optional alternate search terms; these do not replace the official room labels. */
+  searchAliases?: string[]
   /** Y coordinate (Leaflet Simple CRS). */
   lat: number
   /** X coordinate (Leaflet Simple CRS). */

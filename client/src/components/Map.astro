@@ -7,26 +7,30 @@ import '../styles/map.css'
     id="map"
     role="region"
     aria-label="School map"
+    data-i18n-aria-label="map.label"
     aria-describedby="map-instructions"
     tabindex="0"
   >
   </div>
-  <p id="map-instructions" class="visually-hidden">
+  <p id="map-instructions" class="visually-hidden" data-i18n="map.instructions">
     Interactive school map. Use the From and To fields to plan a route; turn-by-turn directions
     appear in the navigation panel.
   </p>
 
   <!-- Floor Switcher UI -->
   <div id="floor-switcher">
-    <button class="floor-btn active" data-floor="2" aria-current="true">Floor 2</button>
-    <button class="floor-btn" data-floor="1">Floor 1</button>
+    <button class="floor-btn active" data-floor="2" aria-current="true" data-i18n="floor.two">
+      Floor 2
+    </button>
+    <button class="floor-btn" data-floor="1" data-i18n="floor.one">Floor 1</button>
   </div>
 
   <!-- Multi-Floor Route Banner -->
   <div id="multi-floor-banner" style="display: none;">
-    <span id="banner-text">Route continues on another floor</span>
+    <span id="banner-text" data-i18n="route.continues">Route continues on another floor</span>
     <button id="banner-switch-btn" class="floor-switch-hint">
-      Switch to Floor <span id="banner-floor"></span> →
+      <span data-i18n="route.switchFloor">Switch to Floor</span>
+      <span id="banner-floor"></span> →
     </button>
   </div>
 </main>

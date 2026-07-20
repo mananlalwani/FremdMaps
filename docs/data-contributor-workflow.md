@@ -21,6 +21,8 @@ are polylines of two or more `[lat, lng]` points; a two-point polyline is one wa
 1. Keep each node's `uid` stable and unique across the project. The containing `floor<N>` directory
    determines its floor at load time; an optional on-disk `floor` value must match that directory.
    Give nodes accurate `rooms` and `type` values; waypoints are intentionally not searchable.
+   Add optional `searchAliases` only for alternate search terms (such as Spanish names); keep
+   `rooms` aligned with the official labels shown on the floor plan.
 2. For stairways, use `type: "stairway"` and matching `connectsTo` names on every linked floor. Verify
    the resulting cross-floor route after changing a portal.
 3. Keep walls aligned to the floor-plan image. Do not add duplicate consecutive wall points.

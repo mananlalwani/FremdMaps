@@ -279,12 +279,23 @@ import { pwaInfo } from 'virtual:pwa-info'
     <NavigationPanel />
     <OnboardingOverlay />
     <div id="update-ready" role="status" aria-live="polite">
-      <span>A newer map is ready.</span>
-      <button id="update-ready-reload" type="button">Reload</button>
+      <span data-i18n="update.ready">A newer map is ready.</span>
+      <button id="update-ready-reload" type="button" data-i18n="update.reload">Reload</button>
     </div>
     <script>
       import '../scripts/onboarding'
       import { registerSW } from 'virtual:pwa-register'
+      import { applyTranslations, getLocale, initializeI18n, setLocale } from '../utils/i18n'
+
+      initializeI18n()
+      const languageSelect = document.getElementById('language-select') as HTMLSelectElement | null
+      if (languageSelect) {
+        languageSelect.value = getLocale()
+        languageSelect.addEventListener('change', () => {
+          setLocale(languageSelect.value === 'es' ? 'es' : 'en')
+          applyTranslations()
+        })
+      }
 
       const updateReady = document.getElementById('update-ready')
       const reloadButton = document.getElementById('update-ready-reload')

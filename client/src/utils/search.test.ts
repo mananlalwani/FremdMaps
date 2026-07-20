@@ -126,6 +126,11 @@ describe('searchNodes', () => {
     expect(uids).toContain('2')
   })
 
+  it('finds official room labels through Spanish search aliases', () => {
+    expect(searchNodes('biblioteca', nodes).map((result) => result.node.uid)).toContain('3')
+    expect(searchNodes('oficina principal', nodes).map((result) => result.node.uid)).toContain('4')
+  })
+
   it('offers single-digit room numbers, with an exact room first', () => {
     const numericRooms = [
       makeNode('101', ['101']),
@@ -167,6 +172,18 @@ describe('findExactMatch', () => {
 
   it('matches against any alias in the rooms array', () => {
     expect(findExactMatch('Room 100', nodes)?.uid).toBe('1')
+  })
+
+  it('matches Spanish aliases without changing the official room label', () => {
+    expect(findExactMatch('oficina principal', nodes)?.uid).toBe('1')
+    expect(findExactMatch('biblioteca', nodes)?.uid).toBe('2')
+  })
+
+  it('ignores punctuation and accents in exact room-name matching', () => {
+    const lockerRoom = makeNode('locker', ["Boy's Locker Room"])
+
+    expect(findExactMatch('Boys locker room', [lockerRoom])?.uid).toBe('locker')
+    expect(findExactMatch('boy’s locker room', [lockerRoom])?.uid).toBe('locker')
   })
 
   it('returns undefined when no exact match exists', () => {

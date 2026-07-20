@@ -2,18 +2,36 @@
 import '../styles/onboarding-overlay.css'
 ---
 
-<div id="onboarding-overlay" aria-modal="true" role="dialog" aria-label="Welcome to Fremd Maps">
+<div
+  id="onboarding-overlay"
+  aria-modal="true"
+  role="dialog"
+  aria-label="Welcome to Fremd Maps"
+  data-i18n-aria-label="onboarding.label"
+>
   <div id="onboarding-card">
     <div class="ob-card-inner">
-      <p class="ob-kicker">Welcome to Fremd Maps</p>
-      <h1 class="ob-headline">Find a room. Get there.</h1>
+      <p class="ob-kicker" data-i18n="onboarding.kicker">Welcome to Fremd Maps</p>
+      <h1 class="ob-headline" data-i18n="onboarding.headline">Find a room. Get there.</h1>
 
-      <p class="ob-copy">
+      <p class="ob-copy" data-i18n="onboarding.copy">
         Search by room number or name. We’ll map the route and handle floor changes for you.
       </p>
 
+      <label
+        class="ob-language-label"
+        for="onboarding-language-select"
+        data-i18n="onboarding.languagePrompt"
+      >
+        Choose your language
+      </label>
+      <select id="onboarding-language-select" class="ob-language-select">
+        <option value="en" data-i18n="language.english">English</option>
+        <option value="es" data-i18n="language.spanish">Español</option>
+      </select>
+
       <button id="onboarding-dismiss" class="ob-btn">
-        Get started
+        <span data-i18n="onboarding.start">Get started</span>
         <svg class="ob-arrow" viewBox="0 0 16 16" fill="none">
           <path
             d="M3 8h10M9 4l4 4-4 4"

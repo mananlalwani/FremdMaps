@@ -1,6 +1,7 @@
 /** Schedule modal controller. Owns schedule rendering, focus management, and room suggestions. */
 
 import { findPath } from '../utils/pathfinding'
+import { t } from '../utils/i18n'
 import { findExactMatch, searchNodes } from '../utils/search'
 import { getSchedule, saveSchedule } from '../utils/storage'
 import type { Graph, Node, ScheduleEntry } from '../utils/types'
@@ -107,7 +108,10 @@ function showScheduleSuggestions(input: HTMLInputElement): void {
   dropdown.className = 'schedule-period-dropdown scrollbar-thin'
   dropdown.id = `schedule-room-results-${input.dataset.period}`
   dropdown.setAttribute('role', 'listbox')
-  dropdown.setAttribute('aria-label', `Room suggestions for period ${input.dataset.period}`)
+  dropdown.setAttribute(
+    'aria-label',
+    t('schedule.suggestions', { period: input.dataset.period ?? '' })
+  )
   scheduleDropdown = dropdown
   scheduleDropdownInput = input
 
@@ -249,13 +253,13 @@ function renderPeriods(): void {
     input.className = 'schedule-period-input'
     input.type = 'text'
     input.value = entry.room
-    input.placeholder = 'Search room or place'
+    input.placeholder = t('schedule.placeholder')
     input.dataset.period = entry.period
     input.autocomplete = 'off'
     input.setAttribute('role', 'combobox')
     input.setAttribute('aria-autocomplete', 'list')
     input.setAttribute('aria-expanded', 'false')
-    input.setAttribute('aria-label', `Room for period ${entry.period}`)
+    input.setAttribute('aria-label', t('schedule.roomForPeriod', { period: entry.period }))
     label.htmlFor = `schedule-period-${entry.period}`
     input.id = label.htmlFor
     setupScheduleAutocomplete(input)
@@ -264,7 +268,7 @@ function renderPeriods(): void {
     navigate.type = 'button'
     navigate.className = 'schedule-period-nav-btn'
     navigate.textContent = '→'
-    navigate.setAttribute('aria-label', `Use period ${entry.period} as destination`)
+    navigate.setAttribute('aria-label', t('schedule.usePeriod', { period: entry.period }))
     navigate.addEventListener('click', () => {
       const room = input.value.trim()
       if (!room) return
@@ -312,11 +316,7 @@ function renderPaths(): void {
   list.textContent = ''
   const entries = getSchedule().filter((entry) => entry.room.trim() !== '')
   if (entries.length < 2) {
-    appendPathMessage(
-      entries.length === 0
-        ? 'No rooms set yet. Tap Edit to add rooms to your schedule.'
-        : 'Add at least 2 rooms to your schedule to see paths.'
-    )
+    appendPathMessage(entries.length === 0 ? t('schedule.empty') : t('schedule.oneRoom'))
     return
   }
 
@@ -339,7 +339,7 @@ function renderPaths(): void {
       item.disabled = true
       const reason = document.createElement('div')
       reason.className = 'schedule-path-notfound'
-      reason.textContent = !graph ? 'Map is still loading' : 'Check the room name'
+      reason.textContent = !graph ? t('schedule.loading') : t('schedule.checkRoom')
       item.title = reason.textContent
       item.appendChild(reason)
     } else {
@@ -350,12 +350,12 @@ function renderPaths(): void {
         item.disabled = true
         const reason = document.createElement('div')
         reason.className = 'schedule-path-notfound'
-        reason.textContent = 'No route is available'
+        reason.textContent = t('schedule.noRoute')
         item.appendChild(reason)
       } else {
         const meta = document.createElement('div')
         meta.className = 'schedule-path-meta'
-        meta.textContent = 'Tap to view route'
+        meta.textContent = t('schedule.viewRoute')
         item.appendChild(meta)
         item.addEventListener('click', () => {
           closeModal()

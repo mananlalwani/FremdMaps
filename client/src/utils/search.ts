@@ -12,7 +12,59 @@
 
 import Fuse from 'fuse.js'
 import { SEARCH_CONFIG } from '../config/featured'
+import { t } from './i18n'
 import type { Node, SearchResult, RoomCategory } from './types'
+
+const SPANISH_ROOM_ALIASES: Record<string, string[]> = {
+  'attendance office': ['oficina de asistencia'],
+  auditorium: ['auditorio'],
+  "boy's locker room": ['vestidor de niños', 'vestuario masculino'],
+  cafeteria: ['cafetería', 'cafeteria', 'comedor'],
+  cashier: ['caja'],
+  'cross fit room': ['sala de crossfit'],
+  'dance room': ['sala de baile'],
+  "girl's locker room": ['vestidor de niñas', 'vestuario femenino'],
+  'gymnastics room': ['sala de gimnasia'],
+  library: ['biblioteca'],
+  'main gym': ['gimnasio principal'],
+  'main office': ['oficina principal'],
+  nurse: ['enfermería', 'enfermeria'],
+  pool: ['piscina'],
+  preschool: ['preescolar'],
+  'south gym': ['gimnasio sur'],
+  'spirit shop': ['tienda escolar'],
+  'student services': ['servicios estudiantiles'],
+  tech: ['tecnología', 'tecnologia'],
+  'test makeup': ['exámenes recuperativos', 'examenes recuperativos'],
+  trainer: ['entrenador'],
+  tutoring: ['tutoría', 'tutoria'],
+  'weight room': ['sala de pesas'],
+  wrestling: ['lucha'],
+  bathroom: ['baño', 'bano', 'baños', 'banos', 'sanitario', 'sanitarios'],
+}
+
+/** Normalize user search terms without changing the official displayed room labels. */
+function normalizeSearchTerm(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/['’]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+}
+
+function getSearchAliases(node: Node): string[] {
+  const translatedAliases = node.rooms.flatMap(
+    (room) => SPANISH_ROOM_ALIASES[room.trim().toLowerCase()] ?? []
+  )
+  const punctuationAliases = node.rooms
+    .map((room) => ({ original: room.trim().toLowerCase(), normalized: normalizeSearchTerm(room) }))
+    .filter(({ original, normalized }) => normalized !== original)
+    .map(({ normalized }) => normalized)
+  return [...new Set([...(node.searchAliases ?? []), ...translatedAliases, ...punctuationAliases])]
+}
 
 /**
  * Infer a `RoomCategory` for a node from its explicit `category` field, its
@@ -91,20 +143,20 @@ export function inferCategory(node: Node): RoomCategory {
  * @returns Capitalised label string, e.g. `'Classroom'`, `'Gymnasium'`.
  */
 export function getCategoryLabel(category: RoomCategory): string {
-  const labels: Record<RoomCategory, string> = {
-    classroom: 'Classroom',
-    office: 'Office',
-    lab: 'Lab',
-    bathroom: 'Bathroom',
-    cafeteria: 'Cafeteria',
-    gymnasium: 'Gymnasium',
-    library: 'Library',
-    auditorium: 'Auditorium',
-    stairway: 'Stairway',
-    entrance: 'Entrance',
-    other: 'Other',
+  const labels: Partial<Record<RoomCategory, Parameters<typeof t>[0]>> = {
+    classroom: 'category.classroom',
+    office: 'category.office',
+    lab: 'category.lab',
+    bathroom: 'category.bathroom',
+    cafeteria: 'category.cafeteria',
+    gymnasium: 'category.gymnasium',
+    library: 'category.library',
+    auditorium: 'category.auditorium',
+    stairway: 'category.stairway',
+    entrance: 'category.entrance',
+    other: 'category.other',
   }
-  return labels[category] || 'Unknown'
+  return t(labels[category] ?? 'category.unknown')
 }
 
 /**
@@ -155,8 +207,8 @@ let searchIndexCache: {
  *   match before a result is included, reducing noisy suggestions.
  * - `distance: 50` — only considers the first 50 characters of each field,
  *   which is sufficient for room numbers/names.
- * - `weight: 0.9 / 0.1` — `rooms` is the primary search field; `type` is a
- *   weak secondary signal (e.g. typing "bathroom" still finds bathroom nodes).
+ * - `weight: 0.75 / 0.15 / 0.1` — official room labels remain primary, with
+ *   alternate search terms and node type as secondary signals.
  * - `ignoreLocation: true` — matches anywhere in the string, not just near the
  *   start (important for multi-word names like "Main Office").
  *
@@ -167,13 +219,14 @@ let searchIndexCache: {
  */
 export function createSearchIndex(nodes: Node[]): Fuse<Node> {
   // Filter out waypoints (not searchable)
-  const searchableNodes = nodes.filter(
-    (n) => n.type !== 'waypoint' && !n.rooms.includes('waypoint')
-  )
+  const searchableNodes: Node[] = nodes
+    .filter((node) => node.type !== 'waypoint' && !node.rooms.includes('waypoint'))
+    .map((node) => ({ ...node, searchAliases: getSearchAliases(node) }))
 
   return new Fuse(searchableNodes, {
     keys: [
-      { name: 'rooms', weight: 0.9 }, // Primary search field
+      { name: 'rooms', weight: 0.75 }, // Official room labels
+      { name: 'searchAliases', weight: 0.15 }, // Spanish and data-provided aliases
       { name: 'type', weight: 0.1 }, // Secondary
     ],
     threshold: 0.2, // Tighter: requires a closer match before showing a result
@@ -303,9 +356,13 @@ export function searchNodes(
  * @returns The first matching node, or `undefined` if none.
  */
 export function findExactMatch(query: string, nodes: Node[]): Node | undefined {
-  const normalized = query.toLowerCase().trim()
+  const normalized = normalizeSearchTerm(query)
 
-  return nodes.find((node) => node.rooms.some((room) => room.toLowerCase() === normalized))
+  return nodes.find((node) =>
+    [...node.rooms, ...getSearchAliases(node)].some(
+      (term) => normalizeSearchTerm(term) === normalized
+    )
+  )
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   rankWithRecency,
   searchNodes,
 } from '../utils/search'
+import { t } from '../utils/i18n'
 import {
   clearRecentSearches,
   getFrequentRooms,
@@ -24,7 +25,9 @@ let resultId = 0
 
 function resultLabel(result: SearchResult): string {
   return (
-    (result.matches.length > 0 ? result.matches[0] : undefined) ??
+    result.node.rooms.find((room) =>
+      result.matches.some((match) => match.trim().toLowerCase() === room.trim().toLowerCase())
+    ) ??
     result.node.rooms.find((room) => room !== 'waypoint') ??
     result.node.uid
   )
@@ -108,7 +111,7 @@ function renderResults(results: SearchResult[], dropdown: HTMLElement, type: Sea
   if (!list) return
   list.textContent = ''
   if (results.length === 0) {
-    list.textContent = 'No rooms found. Try a different search.'
+    list.textContent = t('search.noResults')
     list.className = 'search-empty'
     return
   }
@@ -136,9 +139,9 @@ function renderResults(results: SearchResult[], dropdown: HTMLElement, type: Sea
     const secondary = document.createElement('div')
     secondary.className = 'result-secondary'
     const floorLabel = isSharedDestination
-      ? `Floors ${sharedFloors.join(' & ')}`
+      ? t('floor.floors', { floors: sharedFloors.join(' & ') })
       : result.node.floor
-        ? `Floor ${result.node.floor}`
+        ? t('floor.label', { floor: result.node.floor })
         : ''
     secondary.textContent = `${getCategoryLabel(result.node.category ?? inferCategory(result.node))}${floorLabel ? ` • ${floorLabel}` : ''}`
     content.append(primary, secondary)

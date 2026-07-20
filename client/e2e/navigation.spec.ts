@@ -17,6 +17,43 @@ async function openApp(page: import('@playwright/test').Page): Promise<void> {
   await expect(page.locator('#find-route-btn')).toBeEnabled({ timeout: 15_000 })
 }
 
+test('offers language selection during onboarding', async ({ page }) => {
+  await page.goto('/')
+
+  await expect(page.locator('#onboarding-language-select')).toBeFocused()
+  await page.locator('#onboarding-language-select').selectOption('es')
+  await expect(page.locator('.ob-headline')).toHaveText('Encuentra un salón. Llega allí.')
+  await expect(page.locator('#nav-panel-title')).toHaveText('Fremd Maps')
+  await expect(page.locator('#language-select')).toHaveValue('es')
+})
+
+test('keeps primary navigation controls phone-sized and reachable', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openApp(page)
+
+  await expect(page.locator('#floor-switcher .floor-btn').first()).toHaveCSS('min-height', '44px')
+  await expect(page.locator('#nav-panel')).toHaveCSS('position', 'fixed')
+  await expect(page.locator('#nav-panel .panel-handle')).toBeVisible()
+})
+
+test('finds an official room through its Spanish search alias', async ({ page }) => {
+  await openApp(page)
+
+  await page.locator('#end-input').fill('biblioteca')
+  await expect(
+    page.locator('#end-dropdown-wrapper [role="option"]').filter({ hasText: 'Library' })
+  ).toBeVisible()
+})
+
+test('finds an official room when its punctuation is omitted', async ({ page }) => {
+  await openApp(page)
+
+  await page.locator('#end-input').fill('boys locker room')
+  await expect(
+    page.locator('#end-dropdown-wrapper [role="option"]').filter({ hasText: "Boy's Locker Room" })
+  ).toBeVisible()
+})
+
 test('finds an exact single-digit-compatible room result and draws a same-floor route', async ({
   page,
 }) => {
@@ -49,6 +86,28 @@ test('clears a displayed route', async ({ page }) => {
 
   await page.locator('#clear-route-btn').click()
   await expect(page.locator('#route-status')).toBeHidden()
+})
+
+test('translates the floor switcher when the language changes', async ({ page }) => {
+  await openApp(page)
+
+  await page.locator('#language-select').selectOption('es')
+
+  await expect(page.locator('.floor-btn[data-floor="2"]')).toHaveText('Piso 2')
+  await expect(page.locator('.floor-btn[data-floor="1"]')).toHaveText('Piso 1')
+})
+
+test('translates the cross-floor route switch prompt', async ({ page }) => {
+  await openApp(page)
+  await chooseRoom(page, 'start-input', '129')
+  await chooseRoom(page, 'end-input', '253')
+  await page.locator('#find-route-btn').click()
+  await expect(page.locator('#multi-floor-banner')).toBeVisible()
+
+  await page.locator('#language-select').selectOption('es')
+
+  await expect(page.locator('#banner-text')).toHaveText('La ruta continúa en otro piso')
+  await expect(page.locator('#banner-switch-btn')).toHaveText('Cambiar al piso 2 →')
 })
 
 test('reloads the precached application shell while offline', async ({ page, context }) => {
