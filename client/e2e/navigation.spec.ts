@@ -36,6 +36,16 @@ test('keeps primary navigation controls phone-sized and reachable', async ({ pag
   await expect(page.locator('#nav-panel .panel-handle')).toBeVisible()
 })
 
+test('offers an email link for reporting map issues', async ({ page }) => {
+  await openApp(page)
+
+  const reportIssue = page.locator('#report-issue-btn')
+  await expect(reportIssue).toHaveAttribute(
+    'href',
+    /mailto:fremdmapsbugs@mananlalwani\.com\?subject=Fremd%20Maps%20issue/
+  )
+})
+
 test('finds an official room through its Spanish search alias', async ({ page }) => {
   await openApp(page)
 
