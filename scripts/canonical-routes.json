@@ -1,0 +1,65 @@
+{
+  "primaryAnchor": { "floor": "1", "room": "Attendance Office" },
+  "routes": [
+    {
+      "id": "floor1-attendance-office-to-cafeteria",
+      "start": { "floor": "1", "room": "Attendance Office" },
+      "end": { "floor": "1", "room": "Cafeteria" }
+    },
+    {
+      "id": "floor1-classroom-route",
+      "start": { "uid": "2db11e86-c874-49b4-acea-872ee8b0d131" },
+      "end": { "uid": "28a9342b-4728-4314-bd3c-385065981a4a" }
+    },
+    {
+      "id": "floor2-classroom-route",
+      "start": { "uid": "c68d39b0-e46e-4af2-8479-d779c61eacc2" },
+      "end": { "uid": "7c9f760b-6133-4a4f-912d-3524de120656" }
+    },
+    {
+      "id": "floor1-classroom-to-bathroom",
+      "start": { "uid": "2db11e86-c874-49b4-acea-872ee8b0d131" },
+      "end": { "uid": "016e1b24-1399-40a6-b3e9-5adb35ccf2aa" }
+    },
+    {
+      "id": "floor2-classroom-to-bathroom",
+      "start": { "uid": "c68d39b0-e46e-4af2-8479-d779c61eacc2" },
+      "end": { "uid": "2a3cd73c-32c9-4181-8b06-868dae158868" }
+    },
+    {
+      "id": "stairway-a-floor1-to-floor2",
+      "start": { "uid": "bbbf1d5c-cdbf-488d-a593-5d0c822e412f" },
+      "end": { "uid": "24d49ae1-0db2-4dd8-b183-340a2997702e" }
+    },
+    {
+      "id": "stairway-b-floor1-to-floor2",
+      "start": { "uid": "a13e9c03-f4d9-4458-852a-52880fc3ea5e" },
+      "end": { "uid": "e6380036-0013-4be5-9fd1-6e4ac1dc4d1b" }
+    },
+    {
+      "id": "stairway-c-floor1-to-floor2",
+      "start": { "uid": "aba76031-b31e-4d1c-9f49-50b8fb3b453d" },
+      "end": { "uid": "4d90d8ef-c83a-495f-b5b7-faeb329db100" }
+    },
+    {
+      "id": "stairway-d-floor1-to-floor2",
+      "start": { "uid": "8a14537c-104a-4c61-b08f-400655136bbd" },
+      "end": { "uid": "a8e0ee27-a35c-4ebf-bfb7-d3de69af8112" }
+    },
+    {
+      "id": "stairway-e-floor1-to-floor2",
+      "start": { "uid": "9685bc97-0824-4d3b-8bb5-350dd4b2fda7" },
+      "end": { "uid": "0323994f-1142-4e0c-b0a2-5939946639c8" }
+    },
+    {
+      "id": "stairway-f-floor1-to-floor2",
+      "start": { "uid": "99739d00-2137-4629-9c6b-e86d8e073996" },
+      "end": { "uid": "c557afa3-6159-462b-ad70-b9812c070137" }
+    },
+    {
+      "id": "stairway-g-floor1-to-floor2",
+      "start": { "uid": "95b24dbd-4a1d-47b2-8c1a-7e794da08843" },
+      "end": { "uid": "76ef8423-ecca-45e1-b388-8567497ac971" }
+    }
+  ]
+}
