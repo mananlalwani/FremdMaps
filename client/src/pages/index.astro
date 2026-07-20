@@ -14,7 +14,7 @@ import { pwaInfo } from 'virtual:pwa-info'
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#1a1a2e" />
     <meta name="generator" content={Astro.generator} />
-    <title>Fremd Maps - Floor 2</title>
+    <title>Fremd Maps</title>
     {pwaInfo && <Fragment set:html={pwaInfo.webManifest.linkTag} />}
 
     <!-- Google Fonts -->
@@ -283,6 +283,7 @@ import { pwaInfo } from 'virtual:pwa-info'
       <button id="update-ready-reload" type="button">Reload</button>
     </div>
     <script>
+      import '../scripts/onboarding'
       import { registerSW } from 'virtual:pwa-register'
 
       const updateReady = document.getElementById('update-ready')

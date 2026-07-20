@@ -1,4 +1,5 @@
 import L from 'leaflet'
+import { createDevOverlayControls, type DevOverlayControls } from './dev-tools-overlays'
 import { state } from './map-state'
 import { getGraphStats } from '../utils/graph'
 import type { Graph, Node, TrafficZone, Wall } from '../utils/types'
@@ -17,6 +18,7 @@ export interface DevToolsCallbacks {
 
 let _cb: DevToolsCallbacks
 let devToolsController: AbortController | null = null
+let overlayControls: DevOverlayControls | null = null
 
 function markNavigationDataChanged(): void {
   state.graphDataRevision += 1
@@ -43,8 +45,11 @@ function escHtml(s: string): string {
 export function initDevTools(callbacks: DevToolsCallbacks): void {
   _cb = callbacks
   devToolsController?.abort()
+  overlayControls?.dispose()
+  overlayControls = createDevOverlayControls(callbacks)
+  document.getElementById('dev-menu')?.remove()
   devToolsController = new AbortController()
-  window.addEventListener('schoolwayfinder:floor-data-loaded', refreshFloorOverlays, {
+  window.addEventListener('schoolwayfinder:floor-data-loaded', refreshDeveloperTools, {
     signal: devToolsController.signal,
   })
   buildUI()
@@ -148,7 +153,7 @@ function buildUI(): void {
   const sections = [
     section('Map State', buildMapState),
     section('Graph', buildGraphStats),
-    section('Overlays', buildToggles),
+    section('Overlays', () => overlayControls?.element ?? document.createElement('div')),
     section('Navigation', buildNav),
     section('Actions', buildActions),
     section('Storage', buildStorageViewer),
@@ -226,6 +231,12 @@ function refreshAll(): void {
   refreshZoneList()
 }
 
+/** Refresh live values and any enabled Leaflet overlays after a floor-data change. */
+function refreshDeveloperTools(): void {
+  overlayControls?.refresh()
+  refreshAll()
+}
+
 // ─── Section: Map State ───────────────────────────────────────────────────
 
 function buildMapState(): HTMLElement {
@@ -268,209 +279,6 @@ function buildGraphStats(): HTMLElement {
   })
   c.appendChild(row([btn('↻', () => refreshAll())]))
   return c
-}
-
-// ─── Section: Overlays ────────────────────────────────────────────────────
-
-function buildToggles(): HTMLElement {
-  const c = document.createElement('div')
-  c.style.display = 'flex'
-  c.style.flexDirection = 'column'
-  c.style.gap = '3px'
-
-  const toggleZoneViz = toggleBtn('Zones', false, (on) => {
-    if (on) showZones()
-    else hideZones()
-  })
-  const toggleWallViz = toggleBtn('Walls', false, (on) => {
-    if (on) showWalls()
-    else hideWalls()
-  })
-  const toggleNodeViz = toggleBtn('Nodes', false, (on) => {
-    if (on) showNodes()
-    else hideNodes()
-  })
-  const toggleRouteViz = toggleBtn('Route', state.currentRoute !== null, (on) => {
-    if (on && state.currentRouteFullPath.length > 0) {
-      _cb.redrawRouteForCurrentFloor()
-    } else {
-      _cb.clearRoute()
-    }
-  })
-
-  c.appendChild(toggleZoneViz)
-  c.appendChild(toggleWallViz)
-  c.appendChild(toggleNodeViz)
-  c.appendChild(toggleRouteViz)
-  return c
-}
-
-// ── Zone layers ───────────────────────────────────────────────────────────
-
-let _zoneLayerGroup: L.LayerGroup | null = null
-let zonesVisible = false
-
-function showZones(): void {
-  zonesVisible = true
-  renderZones()
-}
-
-function renderZones(): void {
-  if (!state.map) return
-  removeZoneLayers()
-  _zoneLayerGroup = L.layerGroup().addTo(state.map)
-  for (const zone of state.allTrafficZones) {
-    if (zone.floor !== state.currentFloor) continue
-    const { minLat, minLng, maxLat, maxLng } = zone.bounds
-    const rect = L.rectangle(
-      [
-        [minLat, minLng],
-        [maxLat, maxLng],
-      ],
-      {
-        color: '#60a5fa',
-        weight: 2,
-        fillOpacity: 0.12 + zone.intensity * 0.03,
-        opacity: 0.5,
-      }
-    )
-    rect.bindTooltip(`×${zone.intensity} congestion`, { direction: 'center', permanent: false })
-    _zoneLayerGroup.addLayer(rect)
-  }
-}
-
-function hideZones(): void {
-  zonesVisible = false
-  removeZoneLayers()
-}
-
-function removeZoneLayers(): void {
-  if (_zoneLayerGroup && state.map) {
-    state.map.removeLayer(_zoneLayerGroup)
-    _zoneLayerGroup = null
-  }
-}
-
-// ── Wall layers ───────────────────────────────────────────────────────────
-
-let _wallLayerGroup: L.LayerGroup | null = null
-let wallsVisible = false
-
-function showWalls(): void {
-  wallsVisible = true
-  renderWalls()
-}
-
-function renderWalls(): void {
-  if (!state.map) return
-  removeWallLayers()
-  _wallLayerGroup = L.layerGroup().addTo(state.map)
-  for (const w of state.wallObjects) {
-    if (w.floor && w.floor !== state.currentFloor) continue
-    const line = L.polyline(
-      [
-        [w.start.lat, w.start.lng],
-        [w.end.lat, w.end.lng],
-      ],
-      { color: '#f87171', weight: 5, opacity: 0.55 }
-    )
-    _wallLayerGroup.addLayer(line)
-  }
-}
-
-function hideWalls(): void {
-  wallsVisible = false
-  removeWallLayers()
-}
-
-function removeWallLayers(): void {
-  if (_wallLayerGroup && state.map) {
-    state.map.removeLayer(_wallLayerGroup)
-    _wallLayerGroup = null
-  }
-}
-
-// ── Node markers ──────────────────────────────────────────────────────────
-
-const NODE_COLORS: Record<string, string> = {
-  room: '#4ade80',
-  waypoint: '#6b7280',
-  bathroom: '#60a5fa',
-  stairway: '#a78bfa',
-}
-
-let _nodeLayerGroup: L.LayerGroup | null = null
-let nodesVisible = false
-
-function showNodes(): void {
-  nodesVisible = true
-  renderNodes()
-}
-
-function renderNodes(): void {
-  if (!state.map) return
-  removeNodeLayers()
-  _nodeLayerGroup = L.layerGroup().addTo(state.map)
-  for (const n of state.collectedNodes) {
-    const color = NODE_COLORS[n.type ?? 'room'] ?? '#4ade80'
-    const marker = L.circleMarker([n.lat, n.lng], {
-      radius: n.type === 'waypoint' ? 2 : 4,
-      color,
-      fillColor: color,
-      fillOpacity: 0.7,
-      weight: 1,
-    })
-    const rooms = n.rooms.join(', ')
-    const type = n.type ?? 'room'
-    marker.bindTooltip(
-      `<b>${escHtml(rooms)}</b><br>${type} | ${n.lat.toFixed(1)}, ${n.lng.toFixed(1)}`,
-      {
-        direction: 'top',
-        offset: [0, -4],
-        permanent: false,
-      }
-    )
-    _nodeLayerGroup.addLayer(marker)
-  }
-}
-
-function hideNodes(): void {
-  nodesVisible = false
-  removeNodeLayers()
-}
-
-function removeNodeLayers(): void {
-  if (_nodeLayerGroup && state.map) {
-    state.map.removeLayer(_nodeLayerGroup)
-    _nodeLayerGroup = null
-  }
-}
-
-/** Re-render any enabled developer overlays after current-floor data is ready. */
-function refreshFloorOverlays(): void {
-  if (zonesVisible) renderZones()
-  if (wallsVisible) renderWalls()
-  if (nodesVisible) renderNodes()
-  refreshAll()
-}
-
-function toggleBtn(label: string, initial: boolean, onChange: (on: boolean) => void): HTMLElement {
-  const wrap = document.createElement('label')
-  Object.assign(wrap.style, {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    cursor: 'pointer',
-    fontSize: '11px',
-  })
-  const cb = document.createElement('input')
-  cb.type = 'checkbox'
-  cb.checked = initial
-  cb.style.accentColor = '#f0a500'
-  cb.addEventListener('change', () => onChange(cb.checked))
-  wrap.appendChild(cb)
-  wrap.appendChild(document.createTextNode(label))
-  return wrap
 }
 
 // ─── Section: Navigation ──────────────────────────────────────────────────
@@ -1048,7 +856,7 @@ function applyWallChanges(): void {
     ])
   markNavigationDataChanged()
   void _cb.initializeNavigation()
-  if (wallsVisible) renderWalls()
+  overlayControls?.refresh()
   refreshAll()
 }
 

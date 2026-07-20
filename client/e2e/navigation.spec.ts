@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 
 async function chooseRoom(page: import('@playwright/test').Page, inputId: string, room: string) {
@@ -59,4 +60,11 @@ test('reloads the precached application shell while offline', async ({ page, con
 
   await expect(page.locator('#start-input')).toBeVisible()
   await expect(page.locator('#map')).toBeVisible()
+})
+
+test('has no automatically detectable accessibility violations', async ({ page }) => {
+  await openApp(page)
+
+  const results = await new AxeBuilder({ page }).analyze()
+  expect(results.violations).toEqual([])
 })

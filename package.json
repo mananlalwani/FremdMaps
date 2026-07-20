@@ -1,41 +1,42 @@
 {
-    "name": "fremd-maps",
-    "private": true,
-    "packageManager": "pnpm@10.0.0",
-    "engines": {
-        "node": ">=22.12.0",
-        "pnpm": ">=10.0.0 <11"
-    },
-    "scripts": {
-        "dev": "pnpm --filter client dev",
-        "validate:data": "node scripts/validate-data.mjs",
-        "build": "pnpm run validate:data && pnpm --filter client build",
+  "name": "fremd-maps",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=10.0.0 <11"
+  },
+  "scripts": {
+    "dev": "pnpm --filter client dev",
+    "validate:data": "node scripts/validate-data.mjs",
+    "build": "pnpm run validate:data && pnpm --filter client build",
+    "format:check": "pnpm --filter client exec prettier --check src ../package.json ../.github/workflows/ci.yml '../docs/**/*.md'",
     "test": "pnpm --filter client test",
     "test:coverage": "pnpm --filter client test:coverage",
-        "test:data": "node --test scripts/validate-data.test.mjs",
-        "test:e2e": "pnpm --filter client test:e2e",
-        "deploy": "pnpm run build && wrangler deploy",
-        "preview": "pnpm run build && wrangler dev"
+    "test:data": "node --test scripts/validate-data.test.mjs",
+    "test:e2e": "pnpm --filter client test:e2e",
+    "deploy": "pnpm run build && wrangler deploy",
+    "preview": "pnpm run build && wrangler dev"
+  },
+  "pnpm": {
+    "overrides": {
+      "picomatch@<2.3.2": "2.3.2",
+      "picomatch@>=4.0.0 <4.0.4": "4.0.4",
+      "flatted@<3.4.2": "3.4.2",
+      "defu@<6.1.5": "6.1.5",
+      "ws@<8.21.0": "8.21.0",
+      "fast-uri@<3.1.2": "3.1.2",
+      "undici@<7.28.0": "7.28.0",
+      "minimatch@<10.2.3": "10.2.3",
+      "@vite-pwa/astro": "1.2.0"
     },
-    "pnpm": {
-        "overrides": {
-            "picomatch@<2.3.2": "2.3.2",
-            "picomatch@>=4.0.0 <4.0.4": "4.0.4",
-            "flatted@<3.4.2": "3.4.2",
-            "defu@<6.1.5": "6.1.5",
-            "ws@<8.21.0": "8.21.0",
-            "fast-uri@<3.1.2": "3.1.2",
-            "undici@<7.28.0": "7.28.0",
-            "minimatch@<10.2.3": "10.2.3",
-            "@vite-pwa/astro": "1.2.0"
-        },
-        "peerDependencyRules": {
-            "allowedVersions": {
-                "@vite-pwa/astro": "1.2.0"
-            }
-        }
-    },
-    "devDependencies": {
-        "wrangler": "^4.112.0"
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "@vite-pwa/astro": "1.2.0"
+      }
     }
+  },
+  "devDependencies": {
+    "wrangler": "^4.112.0"
+  }
 }

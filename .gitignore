@@ -35,6 +35,11 @@ Thumbs.db
 # Testing
 coverage/
 .nyc_output/
+client/test-results/
+
+# Local Codex workspace state
+.codex
+.codex/
 
 # Temporary files
 .tmp/

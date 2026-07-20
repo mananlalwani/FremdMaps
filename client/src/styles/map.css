@@ -1,0 +1,256 @@
+#map-instructions {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+#map {
+  height: 100dvh;
+  width: 100dvw;
+  background: var(--map-bg);
+  position: relative;
+}
+
+/* Route marker overrides */
+.route-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Floor Switcher */
+#floor-switcher {
+  position: fixed;
+  z-index: 1002;
+  display: flex;
+  gap: 6px;
+  background: var(--panel-bg);
+  padding: 4px;
+  border-radius: 12px;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Mobile: Top left corner */
+@media (max-width: 767px) {
+  #floor-switcher {
+    top: calc(10px + env(safe-area-inset-top));
+    left: calc(10px + env(safe-area-inset-left));
+  }
+
+  #floor-switcher .floor-btn {
+    padding: 13px 16px;
+    font-size: 12px;
+  }
+}
+
+/* Desktop: Top left, next to nav panel */
+@media (min-width: 768px) {
+  #floor-switcher {
+    top: 16px;
+    left: calc(var(--nav-panel-width) + 36px); /* Nav panel width + gap */
+  }
+
+  #floor-switcher .floor-btn {
+    padding: 10px 18px;
+    font-size: 13px;
+  }
+}
+
+#floor-switcher .floor-btn {
+  position: relative;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background: var(--panel-surface);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-family: var(--font-body);
+  transition-property: background-color, color, border-color, box-shadow, transform;
+  transition-duration: var(--duration-normal);
+  transition-timing-function: var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+
+#floor-switcher .floor-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  pointer-events: none;
+}
+
+#floor-switcher .floor-btn:hover {
+  border-color: var(--amber-500);
+  color: var(--amber-400);
+  background: var(--panel-elevated);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+#floor-switcher .floor-btn:active {
+  transform: scale(0.96) translateY(0);
+}
+
+#floor-switcher .floor-btn.active {
+  background: linear-gradient(135deg, var(--amber-500) 0%, var(--amber-600) 100%);
+  color: var(--panel-bg);
+  border-color: var(--amber-500);
+  box-shadow:
+    0 2px 12px var(--amber-glow-strong),
+    0 0 20px rgba(240, 165, 0, 0.2);
+  font-weight: 700;
+}
+
+/* Multi-Floor Route Banner */
+#multi-floor-banner {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1003;
+  background: linear-gradient(135deg, var(--stair-color) 0%, var(--stair-color-dark) 100%);
+  color: white;
+  padding: 12px 20px;
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 8px 24px rgba(156, 39, 176, 0.5),
+    0 0 40px rgba(156, 39, 176, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  animation: map-banner-enter 0.3s var(--ease-out);
+}
+
+@keyframes map-banner-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes map-banner-exit {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-12px);
+    filter: blur(4px);
+  }
+}
+
+#multi-floor-banner.hiding {
+  animation: map-banner-exit 0.12s var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+#multi-floor-banner #banner-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#multi-floor-banner #banner-text::before {
+  content: '🪜';
+  font-size: 18px;
+}
+
+#multi-floor-banner .floor-switch-hint {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition-property: background-color, border-color, transform;
+  transition-duration: var(--duration-fast);
+  transition-timing-function: var(--ease-out);
+  white-space: nowrap;
+}
+
+#multi-floor-banner .floor-switch-hint:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+#multi-floor-banner .floor-switch-hint:active {
+  transform: scale(0.96);
+}
+
+@media (max-width: 767px) {
+  #multi-floor-banner {
+    top: calc(60px + env(safe-area-inset-top));
+    font-size: 13px;
+    padding: 10px 16px;
+    max-width: calc(100% - 40px);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+#floor-switcher button {
+  min-height: 40px;
+  padding: 10px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background: var(--panel-bg);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-family: var(--font-body);
+  font-size: 12px;
+  transition-property: background-color, color, border-color, transform;
+  transition-duration: var(--duration-normal);
+  transition-timing-function: var(--ease-out);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+#floor-switcher button:hover {
+  border-color: var(--amber-500);
+  color: var(--amber-400);
+}
+
+#floor-switcher button:active {
+  transform: scale(0.96);
+}
+
+/* Pulse animation for selected stairway */
+@keyframes map-stairway-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 12px rgba(255, 69, 0, 0.8);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 0 20px rgba(255, 69, 0, 1);
+  }
+}
+
+.stairway-marker-selected {
+  animation: map-stairway-pulse 1s infinite;
+}

@@ -1,0 +1,112 @@
+/* ===== Touch Targets ===== */
+#nav-panel .recent-item {
+  min-height: 44px;
+}
+
+#schedule-modal .schedule-header-action-btn {
+  min-height: 44px;
+}
+
+@media (min-width: 768px) {
+  #nav-panel .result-favorite {
+    min-width: 0;
+    min-height: 0;
+  }
+  #nav-panel .result-favorite::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* ===== Shared Utilities ===== */
+#nav-panel.dot-grid-bg,
+#schedule-modal .dot-grid-bg {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(255, 255, 255, 0.03) 1px,
+    transparent 0
+  );
+  background-size: 24px 24px;
+  background-color: var(--panel-bg);
+}
+
+#nav-panel.scrollbar-thin::-webkit-scrollbar,
+.schedule-period-dropdown.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+#nav-panel.scrollbar-thin::-webkit-scrollbar-track,
+.schedule-period-dropdown.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#nav-panel.scrollbar-thin::-webkit-scrollbar-thumb,
+.schedule-period-dropdown.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--panel-elevated);
+  border-radius: var(--radius-full);
+}
+
+#nav-panel.scrollbar-thin::-webkit-scrollbar-thumb:hover,
+.schedule-period-dropdown.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+#nav-panel .favorite-star .star-filled,
+#nav-panel .favorite-star .star-empty,
+#nav-panel .result-favorite .star-filled,
+#nav-panel .result-favorite .star-empty {
+  transition-property: opacity, scale, filter;
+  transition-duration: 300ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+#nav-panel .header-icon-btn,
+#nav-panel .quick-action-btn,
+#schedule-modal .schedule-header-action-btn {
+  transition-property: background-color, color, border-color, transform;
+  transition-duration: var(--duration-normal);
+  transition-timing-function: var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ===== Staggered suggestion items ===== */
+#nav-panel .suggestion-item:nth-child(1) {
+  animation-delay: 0s;
+}
+#nav-panel .suggestion-item:nth-child(2) {
+  animation-delay: 0.04s;
+}
+#nav-panel .suggestion-item:nth-child(3) {
+  animation-delay: 0.08s;
+}
+#nav-panel .suggestion-item:nth-child(4) {
+  animation-delay: 0.12s;
+}
+#nav-panel .suggestion-item:nth-child(5) {
+  animation-delay: 0.16s;
+}
+#nav-panel .suggestion-item:nth-child(n + 6) {
+  animation-delay: 0.2s;
+}
+
+/* ===== text-wrap: pretty on key text elements ===== */
+#nav-panel .direction-step-text {
+  text-wrap: pretty;
+}
+#schedule-modal .schedule-path-rooms {
+  text-wrap: pretty;
+}
+#nav-panel .result-primary {
+  text-wrap: pretty;
+}
+#nav-panel .favorite-item {
+  text-wrap: pretty;
+}
+#nav-panel .suggestion-item {
+  text-wrap: pretty;
+}

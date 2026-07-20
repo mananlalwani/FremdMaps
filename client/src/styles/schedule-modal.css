@@ -1,0 +1,478 @@
+/* ===== Schedule Modal ===== */
+@keyframes schedule-dropdown-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+    filter: blur(4px);
+  }
+}
+
+@keyframes schedule-dropdown-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes schedule-reveal-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.schedule-modal {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1100;
+  animation: schedule-reveal-enter 0.22s var(--ease-out);
+}
+
+@media (min-width: 768px) {
+  .schedule-modal {
+    bottom: auto;
+    top: 16px;
+    left: 16px;
+    right: auto;
+    width: 380px;
+    max-width: calc(100vw - 32px);
+  }
+}
+
+.schedule-modal-inner {
+  background: var(--panel-bg);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  box-shadow:
+    0 -8px 32px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  max-height: 80dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  will-change: transform, opacity;
+}
+
+@media (min-width: 768px) {
+  .schedule-modal-inner {
+    border-radius: var(--radius-xl);
+    max-height: calc(100dvh - 32px);
+  }
+}
+
+.schedule-modal-header {
+  padding: 20px 20px 12px;
+  border-bottom: 1px solid var(--panel-border);
+  position: sticky;
+  top: 0;
+  background: var(--panel-bg);
+  z-index: 1;
+}
+
+.schedule-modal-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.schedule-modal-label {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--text-primary);
+  letter-spacing: -0.6px;
+  text-wrap: balance;
+}
+
+.schedule-close-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 44px !important;
+  height: 44px !important;
+  padding: 0 !important;
+  background: var(--panel-surface) !important;
+  border: 1px solid var(--panel-border) !important;
+  border-radius: var(--radius-md) !important;
+  color: var(--text-secondary) !important;
+  cursor: pointer !important;
+  transition-property: background-color, color, border-color, transform !important;
+  transition-duration: var(--duration-normal) !important;
+  transition-timing-function: var(--ease-out) !important;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0 !important;
+}
+
+.schedule-close-btn:hover {
+  border-color: var(--amber-500) !important;
+  color: var(--amber-400) !important;
+  background: var(--panel-elevated) !important;
+}
+
+.schedule-close-btn:active {
+  transform: scale(0.96);
+}
+
+.schedule-modal-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  text-wrap: pretty;
+}
+
+/* ===== Period rows ===== */
+.schedule-periods-list {
+  flex: 1;
+  padding: 8px 0;
+}
+
+.schedule-period-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.schedule-period-row:last-child {
+  border-bottom: none;
+}
+
+.schedule-period-label {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-body);
+  color: var(--text-secondary);
+  letter-spacing: 0;
+  min-width: 52px;
+  flex-shrink: 0;
+}
+
+.schedule-period-input {
+  flex: 1;
+  min-height: 44px;
+  padding: 10px 12px;
+  background: var(--panel-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  /* 16px on mobile prevents iOS Safari from auto-zooming on focus */
+  font-size: 16px;
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  transition:
+    border-color var(--duration-normal) var(--ease-out),
+    box-shadow var(--duration-normal) var(--ease-out);
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .schedule-period-input {
+    font-size: 13px;
+  }
+}
+
+.schedule-period-input::placeholder {
+  color: var(--text-muted);
+}
+
+.schedule-period-input:focus {
+  outline: none;
+  border-color: var(--amber-500);
+  box-shadow: 0 0 0 2px var(--amber-glow);
+  background: var(--panel-elevated);
+}
+
+.schedule-period-nav-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition-property: background-color, color, border-color, transform;
+  transition-duration: var(--duration-fast);
+  transition-timing-function: var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+
+.schedule-period-nav-btn:hover {
+  border-color: var(--amber-500);
+  color: var(--amber-400);
+  background: var(--panel-elevated);
+}
+
+.schedule-period-nav-btn:active {
+  transform: scale(0.96);
+}
+
+.schedule-period-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ===== Header action buttons (Edit / Back) ===== */
+.schedule-header-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.schedule-header-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 14px 10px 12px;
+  background: var(--panel-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font-body);
+  white-space: nowrap;
+}
+
+.schedule-header-action-btn:hover {
+  border-color: var(--amber-500);
+  color: var(--amber-400);
+  background: var(--panel-elevated);
+}
+
+.schedule-header-action-btn:active {
+  transform: scale(0.96);
+}
+
+/* ===== Footer ===== */
+.schedule-modal-footer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px calc(20px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--panel-border);
+  position: sticky;
+  bottom: 0;
+  background: var(--panel-bg);
+}
+
+.schedule-save-btn {
+  flex: 1;
+}
+
+/* ===== All Paths View ===== */
+.schedule-paths-list {
+  padding: 12px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.schedule-path-item {
+  background: var(--panel-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition-property: background-color, border-color, box-shadow, transform;
+  transition-duration: var(--duration-fast);
+  transition-timing-function: var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+  width: 100%;
+  text-align: left;
+}
+
+.schedule-path-item:hover {
+  border-color: var(--amber-500);
+  background: var(--panel-elevated);
+  box-shadow: 0 2px 8px rgba(240, 165, 0, 0.1);
+}
+
+.schedule-path-item:active {
+  transform: scale(0.96);
+}
+
+.schedule-path-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.schedule-path-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.schedule-path-period {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-body);
+  color: var(--text-secondary);
+  letter-spacing: 0;
+}
+
+.schedule-path-arrow {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.schedule-path-rooms {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.schedule-path-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  margin-top: 2px;
+}
+
+.schedule-path-notfound {
+  font-size: 11px;
+  color: var(--error, #f87171);
+  margin-top: 2px;
+}
+
+.schedule-empty-state {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: var(--font-body);
+}
+
+/* ===== Schedule Period Autocomplete Dropdown ===== */
+.schedule-period-dropdown {
+  position: fixed;
+  z-index: 2000;
+  background: var(--panel-surface);
+  border: 1px solid var(--amber-500);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 0 0 1px var(--amber-glow);
+  max-height: 220px;
+  overflow-y: auto;
+  animation: schedule-dropdown-reveal 0.15s var(--ease-out);
+}
+
+.schedule-period-dropdown-item {
+  min-height: 40px;
+  display: block;
+  width: calc(100% - 8px);
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  margin: 2px 4px;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.schedule-period-dropdown-item:hover,
+.schedule-period-dropdown-item.is-active,
+.schedule-period-dropdown-item:active {
+  background: var(--panel-elevated);
+  border-color: var(--amber-500);
+}
+
+.schedule-period-dropdown-empty {
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  text-align: center;
+}
+
+/* ===== Exit Animations ===== */
+@keyframes schedule-fade-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes schedule-view-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-12px);
+    filter: blur(4px);
+  }
+}
+
+#favorites-container.hiding {
+  animation: schedule-fade-exit 100ms var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+#route-status.hiding {
+  animation: schedule-fade-exit 100ms var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+#schedule-modal.hiding {
+  animation: schedule-dropdown-exit 0.15s var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+#schedule-view-paths.schedule-view-exit,
+#schedule-view-edit.schedule-view-exit {
+  animation: schedule-view-exit 0.12s var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+#schedule-view-paths.schedule-view-enter,
+#schedule-view-edit.schedule-view-enter {
+  animation: schedule-reveal-enter 0.2s var(--ease-out);
+}
+
+.schedule-period-dropdown.hiding {
+  animation: schedule-dropdown-exit 0.12s var(--ease-out) forwards;
+  pointer-events: none;
+}

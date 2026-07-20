@@ -30,7 +30,9 @@ export default {
         'Content-Security-Policy',
         [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline'",
+          "script-src 'self'",
+          // Inline style attributes support initial hidden states; the lazy developer menu also
+          // uses CSSOM styles. Scripts are external, so script-src stays strict.
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com",
           "img-src 'self' data:",

@@ -39,7 +39,7 @@ then append `?dev` to the URL.
 
 ```bash
 pnpm --filter client lint
-pnpm --filter client exec prettier --check src
+pnpm run format:check
 pnpm --filter client typecheck
 pnpm test
 pnpm run test:data

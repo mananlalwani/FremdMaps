@@ -21,6 +21,12 @@ export default defineConfig({
         functions: 70,
         branches: 65,
         statements: 70,
+        'src/map/map-init.ts': {
+          lines: 55,
+          functions: 60,
+          branches: 65,
+          statements: 55,
+        },
       },
     },
   },

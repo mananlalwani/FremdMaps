@@ -1,0 +1,85 @@
+#nav-panel .direction-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-surface);
+  border: 1px solid var(--panel-border);
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+#nav-panel .direction-step.active {
+  background: var(--panel-elevated);
+  border-color: var(--amber-500);
+  color: var(--text-primary);
+}
+
+#nav-panel .direction-step.completed {
+  opacity: 0.45;
+}
+
+#nav-panel .direction-step-icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-body);
+}
+
+#nav-panel .direction-step-icon.start {
+  background: var(--route-start);
+  color: white;
+}
+
+#nav-panel .direction-step-icon.end {
+  background: var(--route-end);
+  color: white;
+}
+
+#nav-panel .direction-step-icon.stair {
+  background: var(--stair-color);
+  color: white;
+}
+
+#nav-panel .direction-step-icon.walk {
+  background: var(--panel-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--panel-border);
+}
+
+#nav-panel .direction-step-text {
+  flex: 1;
+  line-height: 1.4;
+}
+
+#nav-panel .direction-step-text strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+#nav-panel .direction-step-floor {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  padding-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+#nav-panel .direction-step.active .direction-step-floor {
+  color: var(--amber-500);
+}

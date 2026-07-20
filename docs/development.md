@@ -20,7 +20,7 @@ command in place of the non-coverage unit-test command.
 
 ```bash
 pnpm --filter client lint
-pnpm --filter client exec prettier --check src
+pnpm run format:check
 pnpm --filter client typecheck
 pnpm test
 pnpm run test:coverage
@@ -39,8 +39,8 @@ node scripts/validate-data.mjs --report=json
 ```
 
 The unit suite covers graph construction, geometry, A*, directions, search, storage, and map modules.
-Playwright exercises same-floor routing, cross-floor transitions, route clearing, and an offline reload
-after the service worker is installed.
+Playwright exercises same-floor routing, cross-floor transitions, route clearing, an offline reload
+after the service worker is installed, and an axe accessibility scan of the initial navigation view.
 
 ## Troubleshooting
 

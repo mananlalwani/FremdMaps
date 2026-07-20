@@ -7,11 +7,11 @@ loaded directly by the browser, so edit carefully and retain the approved source
 
 Each floor contains three files:
 
-| File | Purpose |
-| --- | --- |
+| File         | Purpose                                                                 |
+| ------------ | ----------------------------------------------------------------------- |
 | `nodes.json` | Searchable rooms, invisible waypoints, bathrooms, and stairway portals. |
-| `walls.json` | Wall polylines that block visibility-graph edges. |
-| `zones.json` | Rectangular traffic zones that multiply route edge costs. |
+| `walls.json` | Wall polylines that block visibility-graph edges.                       |
+| `zones.json` | Rectangular traffic zones that multiply route edge costs.               |
 
 The map uses Leaflet Simple CRS: `lat` is the image Y-axis and `lng` is the image X-axis. Wall entries
 are polylines of two or more `[lat, lng]` points; a two-point polyline is one wall segment.
