@@ -69,8 +69,8 @@ export const UI_CONFIG = {
   ROUTE_PATH_WEIGHT: 6,
   ROUTE_START_COLOR: '#4CAF50',
   ROUTE_END_COLOR: '#f44336',
-  STAIR_COLOR: '#9C27B0',
-  STAIR_GLOW: 'rgba(156, 39, 176, 0.5)',
+  STAIR_COLOR: '#34343F',
+  STAIR_GLOW: 'rgba(0, 0, 0, 0.32)',
 } as const
 
 /**

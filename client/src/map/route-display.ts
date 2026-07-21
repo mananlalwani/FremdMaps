@@ -293,16 +293,16 @@ export function redrawRouteForCurrentFloor(): void {
       const targetFloor = neighbor?.floor
 
       // A same-floor route can pass a stairway node as an ordinary waypoint.
-      // Only show the purple portal marker when the route actually changes floors.
+      // Only show the floor-transition marker when the route actually changes floors.
       if (!targetFloor) continue
 
       const label = `Floor ${targetFloor}`
       const safeLabel = escapeHtml(label)
       const stairIcon = L.divIcon({
         className: 'route-marker stairway',
-        html: `<div style="background: ${UI_CONFIG.STAIR_COLOR}; color: white; min-width: 28px; height: 28px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; font-family: 'Plus Jakarta Sans', sans-serif; border: 2px solid white; box-shadow: 0 0 12px ${UI_CONFIG.STAIR_GLOW}; padding: 0 8px; gap: 4px; white-space: nowrap; cursor: pointer;">&#x1FA9C;${safeLabel ? ' &rarr; ' + safeLabel : ''}</div>`,
-        iconSize: [110, 28],
-        iconAnchor: [55, 14],
+        html: `<div style="background: ${UI_CONFIG.STAIR_COLOR}; color: white; min-width: 28px; height: 28px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; font-family: 'Plus Jakarta Sans', sans-serif; border: 2px solid white; box-shadow: 0 0 12px ${UI_CONFIG.STAIR_GLOW}; padding: 0 8px; white-space: nowrap; cursor: pointer;">${safeLabel}</div>`,
+        iconSize: [72, 28],
+        iconAnchor: [36, 14],
       })
 
       const stairMarker = L.marker([node.lat, node.lng], { icon: stairIcon }).addTo(state.map)
