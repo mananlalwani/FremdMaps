@@ -493,7 +493,6 @@ export function switchFloor(floorId: string): void {
   graphLogger.info(`Switching to floor ${floorId}`)
   state.currentFloor = floorId
   saveSelectedFloor(floorId)
-  document.title = `Fremd Maps - Floor ${floorId}`
 
   const floor = FLOORS.AVAILABLE.find((f) => f.id === floorId)
   if (floor && state.currentImageOverlay) {
