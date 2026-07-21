@@ -46,6 +46,14 @@ test('offers an email link for reporting map issues', async ({ page }) => {
   )
 })
 
+test('shows a persistent error when navigation data cannot load', async ({ page }) => {
+  await page.route('**/data/**', (route) => route.fulfill({ status: 503, body: 'Unavailable' }))
+  await page.goto('/')
+
+  await expect(page.locator('#empty-state')).toHaveText('Unable to load navigation data.')
+  await expect(page.locator('#empty-state')).toBeVisible()
+})
+
 test('finds an official room through its Spanish search alias', async ({ page }) => {
   await openApp(page)
 
@@ -120,7 +128,15 @@ test('translates the cross-floor route switch prompt', async ({ page }) => {
   await expect(page.locator('#banner-switch-btn')).toHaveText('Cambiar al piso 2 →')
 })
 
-test('reloads the precached application shell while offline', async ({ page, context }) => {
+test('reloads the precached application shell while offline', async ({
+  page,
+  context,
+  browserName,
+}) => {
+  test.skip(
+    browserName === 'webkit',
+    'WebKit throws an internal error when reloading an offline service-worker-controlled page.'
+  )
   test.setTimeout(75_000)
   await openApp(page)
   await page.evaluate(async () => navigator.serviceWorker.ready)

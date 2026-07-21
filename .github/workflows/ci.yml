@@ -50,8 +50,8 @@ jobs:
       - name: Build (includes data validation)
         run: pnpm run build
 
-      - name: Install Chromium for browser smoke tests
-        run: pnpm --filter client exec playwright install --with-deps chromium
+      - name: Install browsers for cross-browser smoke tests
+        run: pnpm --filter client exec playwright install --with-deps chromium firefox webkit
 
       - name: Browser smoke tests
         run: pnpm run test:e2e
