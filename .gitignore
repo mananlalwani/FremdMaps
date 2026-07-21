@@ -45,6 +45,7 @@ client/test-results/
 .tmp/
 temp/
 *.tmp
+TODO.md
 
 # Debug
 .cache/
