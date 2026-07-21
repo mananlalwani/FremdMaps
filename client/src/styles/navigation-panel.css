@@ -468,21 +468,11 @@
   display: none;
 }
 
-/* Empty state (JS-injected content) */
+/* Only shown when the floor's navigation data fails to load. */
 #nav-panel #empty-state {
-  color: var(--text-muted);
+  color: #ff6b6b;
   font-size: 13px;
   padding: var(--space-4) 0;
-}
-
-#nav-panel .loading-spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid var(--panel-border);
-  border-top-color: var(--amber-500);
-  border-radius: 50%;
-  animation: navigation-spinner-spin 0.8s linear infinite;
-  margin: var(--space-4) auto;
 }
 
 @keyframes navigation-spinner-spin {

@@ -354,8 +354,6 @@ export interface MapInitCallbacks {
   redrawRouteForCurrentFloor: () => void
   /** Rebuild the visibility graph and A* cache after data changes. */
   initializeNavigation: () => Promise<void>
-  /** Create a styled `<p>` element (used for error messages in the empty-state panel). */
-  createTextParagraph: (text: string, style?: string) => HTMLParagraphElement
 }
 
 let _cb: MapInitCallbacks
@@ -602,7 +600,7 @@ export function clearMapData(): void {
  * 5. Schedule `initializeNavigation` via the existing request-ID pattern.
  *
  * On any network or parse error, logs to `logger.error` and displays a
- * human-readable message in the `#empty-state` panel.
+ * persistent error message in the navigation panel.
  */
 export async function loadData(): Promise<void> {
   const floorId = state.currentFloor
@@ -612,6 +610,12 @@ export async function loadData(): Promise<void> {
   activeLoadController = controller
   const isCurrentRequest = (): boolean =>
     requestId === loadDataRequestId && state.currentFloor === floorId && !controller.signal.aborted
+
+  const emptyState = document.getElementById('empty-state')
+  if (emptyState) {
+    emptyState.textContent = ''
+    emptyState.hidden = true
+  }
 
   try {
     clearMapData()
@@ -696,12 +700,9 @@ export async function loadData(): Promise<void> {
     }
     if (!isCurrentRequest()) return
     logger.error(`[${requestId}] Failed to load data:`, err)
-    const emptyState = document.getElementById('empty-state')
     if (emptyState) {
-      emptyState.textContent = ''
-      emptyState.appendChild(
-        _cb.createTextParagraph('Unable to load navigation data.', 'color: #ff6b6b;')
-      )
+      emptyState.textContent = 'Unable to load navigation data.'
+      emptyState.hidden = false
     }
   } finally {
     if (activeLoadController === controller) activeLoadController = null

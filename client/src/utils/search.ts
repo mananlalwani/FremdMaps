@@ -369,7 +369,7 @@ export function findExactMatch(query: string, nodes: Node[]): Node | undefined {
  * Return nodes whose room names contain any of the `featuredNames` strings
  * (case-insensitive substring match).
  *
- * Used to populate the empty-state suggestions panel when the search box is
+ * Used to populate the initial suggestions panel when the search box is
  * blank.  The order follows `featuredNames`, not the node array order.
  *
  * @param nodes         Node pool.

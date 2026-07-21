@@ -81,23 +81,13 @@ import '../styles/map.css'
 
   // ========== SAFE DOM HELPERS (XSS Prevention) ==========
 
-  /**
-   * Safely create a paragraph element with text
-   */
-  function createTextParagraph(text: string, style?: string): HTMLParagraphElement {
-    const p = document.createElement('p')
-    p.textContent = text
-    if (style) p.setAttribute('style', style)
-    return p
-  }
-
   // ========== NAVIGATION LOGIC ==========
 
   /**
    * Called by map-init after floor data finishes loading.
    * Builds the client-side visibility graph, invalidates the search cache,
-   * initialises the search/recent/favourites UI, clears the empty-state
-   * placeholder, and enables the navigation action buttons.
+   * initialises the search/recent/favourites UI and enables the navigation
+   * action buttons.
    */
   async function initializeNavigation(): Promise<void> {
     const requestId = ++navigationBuildRequestId
@@ -129,11 +119,6 @@ import '../styles/map.css'
     } else {
       refreshRecentSearchesUI(requestRoute)
       updateFavoritesUI()
-    }
-
-    const emptyState = document.getElementById('empty-state')
-    if (emptyState) {
-      emptyState.innerHTML = ''
     }
 
     setNavButtonsDisabled(false)
@@ -201,7 +186,6 @@ import '../styles/map.css'
     clearRoute,
     redrawRouteForCurrentFloor,
     initializeNavigation,
-    createTextParagraph,
   })
 
   // Dev tools are lazy-loaded and exposed for local development/preview. A

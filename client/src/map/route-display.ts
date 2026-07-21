@@ -83,14 +83,10 @@ export function displayRoute(path: Node[], _totalDistance: number): void {
   redrawRouteForCurrentFloor()
 
   const routeStatus = document.getElementById('route-status')
-  const emptyState = document.getElementById('empty-state')
-
   if (routeStatus) {
     routeStatus.classList.remove('hiding')
     routeStatus.style.display = 'block'
   }
-  if (emptyState) emptyState.style.display = 'none'
-
   updateRouteStatus(path)
 
   generateDirections(path, state.currentFloor)
@@ -357,7 +353,6 @@ export function clearRoute(): void {
   state.routeMarkers = []
 
   const routeStatus = document.getElementById('route-status')
-  const emptyState = document.getElementById('empty-state')
   const startInput = document.getElementById('start-input') as HTMLInputElement | null
   const endInput = document.getElementById('end-input') as HTMLInputElement | null
   const directionsList = document.getElementById('directions-list')
@@ -373,7 +368,6 @@ export function clearRoute(): void {
       { once: true }
     )
   }
-  if (emptyState) emptyState.style.display = 'block'
   if (startInput) startInput.value = ''
   if (endInput) endInput.value = ''
   if (directionsList) directionsList.innerHTML = ''

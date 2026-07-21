@@ -121,7 +121,6 @@ describe('clearRoute', () => {
   beforeEach(() => {
     document.body.innerHTML = `
       <div id="route-status" style="display: block;"></div>
-      <div id="empty-state"></div>
       <div id="directions-list"></div>
     `
     state.map = { removeLayer: vi.fn() } as unknown as typeof state.map
