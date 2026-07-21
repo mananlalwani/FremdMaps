@@ -56,8 +56,6 @@
   background: var(--text-muted);
 }
 
-#nav-panel .favorite-star .star-filled,
-#nav-panel .favorite-star .star-empty,
 #nav-panel .result-favorite .star-filled,
 #nav-panel .result-favorite .star-empty {
   transition-property: opacity, scale, filter;
@@ -102,9 +100,6 @@
   text-wrap: pretty;
 }
 #nav-panel .result-primary {
-  text-wrap: pretty;
-}
-#nav-panel .favorite-item {
   text-wrap: pretty;
 }
 #nav-panel .suggestion-item {

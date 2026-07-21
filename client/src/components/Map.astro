@@ -46,7 +46,6 @@ import '../styles/map.css'
 
   // Map modules
   import { state } from '../map/map-state'
-  import { updateFavoritesUI } from '../map/favorites-ui'
   import { createGraphController } from '../map/graph-controller'
   import { cancelPendingDataLoad, initMap as _initMap, switchFloor } from '../map/map-init'
   import { setupPanelBehavior } from '../map/panel-behavior'
@@ -86,7 +85,7 @@ import '../styles/map.css'
   /**
    * Called by map-init after floor data finishes loading.
    * Builds the client-side visibility graph, invalidates the search cache,
-   * initialises the search/recent/favourites UI and enables the navigation
+   * initialises the search and recent-route UI, then enables the navigation
    * action buttons.
    */
   async function initializeNavigation(): Promise<void> {
@@ -118,7 +117,6 @@ import '../styles/map.css'
       _searchEnhancementsInitialized = true
     } else {
       refreshRecentSearchesUI(requestRoute)
-      updateFavoritesUI()
     }
 
     setNavButtonsDisabled(false)

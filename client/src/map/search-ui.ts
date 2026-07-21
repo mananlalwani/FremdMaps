@@ -12,10 +12,13 @@ import {
 import { t } from '../utils/i18n'
 import {
   clearRecentSearches,
+  getFavorites,
   getFrequentRooms,
   getRecentSearches,
+  isFavorite,
   removeRecentSearch,
   trackSearch,
+  toggleFavorite,
 } from '../utils/storage'
 import type { Node, SearchResult } from '../utils/types'
 import { state } from './map-state'
@@ -82,6 +85,14 @@ function rankByRouteProximity(results: SearchResult[], type: SearchType): Search
   })
 }
 
+/** Keep saved destinations ahead of otherwise equivalent autocomplete results. */
+function prioritizeFavorites(results: SearchResult[]): SearchResult[] {
+  const favorites = new Set(getFavorites())
+  return [...results].sort(
+    (a, b) => Number(favorites.has(b.node.uid)) - Number(favorites.has(a.node.uid))
+  )
+}
+
 function inputFor(type: SearchType): HTMLInputElement | null {
   return document.getElementById(
     type === 'start' ? 'start-input' : 'end-input'
@@ -104,6 +115,52 @@ function hide(dropdown: HTMLElement): void {
     : null
   input?.setAttribute('aria-expanded', 'false')
   input?.removeAttribute('aria-activedescendant')
+}
+
+function createStarIcon(className: string, filled: boolean): SVGSVGElement {
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  icon.classList.add(className)
+  icon.setAttribute('viewBox', '0 0 24 24')
+  icon.setAttribute('aria-hidden', 'true')
+  icon.setAttribute('focusable', 'false')
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  path.setAttribute(
+    'd',
+    'm12 3 2.78 5.63 6.22.9-4.5 4.38 1.06 6.19L12 17.18 6.44 20.1 7.5 13.91 3 9.53l6.22-.9L12 3Z'
+  )
+  path.setAttribute('fill', filled ? 'currentColor' : 'none')
+  path.setAttribute('stroke', 'currentColor')
+  path.setAttribute('stroke-linejoin', 'round')
+  path.setAttribute('stroke-width', '1.8')
+  icon.appendChild(path)
+  return icon
+}
+
+function createFavoriteButton(node: Node, label: string): HTMLButtonElement {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.className = 'result-favorite'
+
+  const filledStar = createStarIcon('star-filled', true)
+  const emptyStar = createStarIcon('star-empty', false)
+  button.append(filledStar, emptyStar)
+
+  const updateState = (): void => {
+    const active = isFavorite(node.uid)
+    button.classList.toggle('active', active)
+    button.setAttribute(
+      'aria-label',
+      t(active ? 'favorite.remove' : 'favorite.add', { room: label })
+    )
+  }
+
+  updateState()
+  button.addEventListener('click', () => {
+    toggleFavorite(node.uid)
+    updateState()
+  })
+  return button
 }
 
 function renderResults(results: SearchResult[], dropdown: HTMLElement, type: SearchType): void {
@@ -159,14 +216,21 @@ function renderResults(results: SearchResult[], dropdown: HTMLElement, type: Sea
     })
     option.append(icon, content)
     row.appendChild(option)
+    if (type === 'end') row.appendChild(createFavoriteButton(result.node, label))
     list.appendChild(row)
   }
 }
 
 function showSuggestions(dropdown: HTMLElement, type: SearchType): void {
-  const rooms = FEATURED_ROOMS.map((room) => findExactMatch(room, state.allNodesAllFloors)).filter(
-    (node): node is Node => Boolean(node)
-  )
+  const favoriteNodes = getFavorites()
+    .map((uid) => state.allNodesAllFloors.find((node) => node.uid === uid))
+    .filter((node): node is Node => Boolean(node))
+  const featuredNodes = FEATURED_ROOMS.map((room) =>
+    findExactMatch(room, state.allNodesAllFloors)
+  ).filter((node): node is Node => Boolean(node))
+  const rooms = [
+    ...new Map([...favoriteNodes, ...featuredNodes].map((node) => [node.uid, node])).values(),
+  ]
   renderResults(
     rooms.map((node) => ({ node, score: 0, matches: [node.rooms[0]] })),
     dropdown,
@@ -193,20 +257,22 @@ function setupInput(type: SearchType): () => void {
       return
     }
     if (query.length < SEARCH_CONFIG.MIN_QUERY_LENGTH) return
-    const results = collapseSharedDestinationResults(
-      rankByRouteProximity(
-        rankWithRecency(
-          searchNodes(query, state.allNodesAllFloors, { limit: SEARCH_CONFIG.MAX_RESULTS }),
-          getFrequentRooms()
-        ).filter(
-          (result) =>
-            result.node.type === 'room' ||
-            result.node.category !== undefined ||
-            (!result.node.type && !result.node.rooms.includes('waypoint'))
+    const results = prioritizeFavorites(
+      collapseSharedDestinationResults(
+        rankByRouteProximity(
+          rankWithRecency(
+            searchNodes(query, state.allNodesAllFloors, { limit: SEARCH_CONFIG.MAX_RESULTS }),
+            getFrequentRooms()
+          ).filter(
+            (result) =>
+              result.node.type === 'room' ||
+              result.node.category !== undefined ||
+              (!result.node.type && !result.node.rooms.includes('waypoint'))
+          ),
+          type
         ),
         type
-      ),
-      type
+      )
     )
     trackSearch(query, results.length)
     state.currentSearchResults = results

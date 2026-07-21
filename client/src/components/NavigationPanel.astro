@@ -1,7 +1,6 @@
 ---
 import '../styles/navigation-panel.css'
 import '../styles/navigation-directions.css'
-import '../styles/navigation-favorites.css'
 import '../styles/navigation-search.css'
 import '../styles/schedule-modal.css'
 import '../styles/navigation-utilities.css'
@@ -17,13 +16,12 @@ import '../styles/navigation-utilities.css'
     1. #panel-handle          — mobile drag handle (tap cycles normal/expanded/minimized)
     2. .panel-header          — title and recent-searches toggle
     3. #recent-dropdown       — slide-down history list (toggled by #recent-toggle-btn)
-    4. #favorites-container   — starred rooms; populated by favorites-ui.ts
-    5. #start-input / #start-dropdown-wrapper  — "From" search field + autocomplete
-    6. #end-input   / #end-dropdown-wrapper    — destination search field + autocomplete
-    7. .button-group          — #find-route-btn, #clear-route-btn
-   8. .quick-actions         — #find-bathroom-btn, #schedule-btn
-   9. #route-status          — status text + #directions-list (turn-by-turn)
-   10. #empty-state          — hidden navigation-data loading error
+    4. #start-input / #start-dropdown-wrapper  — "From" search field + autocomplete
+    5. #end-input   / #end-dropdown-wrapper    — destination search field + autocomplete
+    6. .button-group          — #find-route-btn, #clear-route-btn
+    7. .quick-actions         — #find-bathroom-btn, #schedule-btn
+    8. #route-status          — status text + #directions-list (turn-by-turn)
+    9. #empty-state           — hidden navigation-data loading error
 
   Below the panel, the Schedule Modal (#schedule-modal) is rendered as a fixed
   overlay with two views toggled by schedule-ui.ts:
@@ -101,16 +99,6 @@ import '../styles/navigation-utilities.css'
     </div>
     <div id="recent-list" class="recent-dropdown-list">
       <!-- Populated by search-ui.ts -->
-    </div>
-  </div>
-
-  <!-- Favorites are rendered by favorites-ui.ts and hidden when none are saved. -->
-  <div class="favorites" id="favorites-container" style="display: none;">
-    <div class="favorites-header">
-      <span class="section-label">Favorites</span>
-    </div>
-    <div id="favorites-list" class="favorites-list">
-      <!-- Populated by favorites-ui.ts -->
     </div>
   </div>
 
