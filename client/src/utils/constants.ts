@@ -50,8 +50,8 @@ export const MAP_CONFIG = {
 export const FLOORS = {
   DEFAULT: '2',
   AVAILABLE: [
-    { id: '1', name: 'Floor 1', image: '/floor1.png' },
-    { id: '2', name: 'Floor 2', image: '/floor2.png' },
+    { id: '1', name: 'Floor 1', image: '/floor1.webp' },
+    { id: '2', name: 'Floor 2', image: '/floor2.webp' },
   ],
 } as const
 

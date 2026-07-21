@@ -50,10 +50,15 @@ export default defineConfig({
       },
 
       workbox: {
-        globPatterns: ['**/*.{html,js,css,json,png,svg,ico,xml,webmanifest}'],
+        globPatterns: ['**/*.{html,js,css,json,png,webp,svg,ico,xml,webmanifest}'],
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/_astro\//, /\/data\//, /\/icons\//, /\.(?:png|svg|ico|json|webmanifest|js|css|xml)$/],
+        navigateFallbackDenylist: [
+          /^\/_astro\//,
+          /\/data\//,
+          /\/icons\//,
+          /\.(?:png|webp|svg|ico|json|webmanifest|js|css|xml)$/,
+        ],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
