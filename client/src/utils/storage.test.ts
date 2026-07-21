@@ -55,6 +55,8 @@ const {
   getSchedule,
   saveSchedule,
   updateSchedulePeriod,
+  getSelectedFloor,
+  saveSelectedFloor,
 } = await import('./storage')
 
 // ---------------------------------------------------------------------------
@@ -250,6 +252,21 @@ describe('trackSearch', () => {
     trackSearch('test', 1)
     addRecentSearch('A', 'B')
     expect(getRecentSearches()).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Map Preferences
+// ---------------------------------------------------------------------------
+
+describe('selected floor', () => {
+  it('returns null until a floor has been saved', () => {
+    expect(getSelectedFloor()).toBeNull()
+  })
+
+  it('persists the last selected floor', () => {
+    saveSelectedFloor('1')
+    expect(getSelectedFloor()).toBe('1')
   })
 })
 

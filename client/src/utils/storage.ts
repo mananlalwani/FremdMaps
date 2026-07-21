@@ -12,6 +12,7 @@
  * - `SEARCH_ANALYTICS` — local-only query and result-count history, reserved
  *   for future ranking work. Cleared automatically on quota exhaustion.
  * - `SCHEDULE`        — user's class schedule (period → room assignments).
+ * - `SELECTED_FLOOR`  — last map floor chosen by the user.
  */
 
 import type { SearchHistoryEntry, ScheduleEntry } from './types'
@@ -22,6 +23,7 @@ const STORAGE_KEYS = {
   FAVORITES: 'nav_favorites',
   SEARCH_ANALYTICS: 'nav_search_analytics',
   SCHEDULE: 'nav_schedule',
+  SELECTED_FLOOR: 'nav_selected_floor',
 } as const
 
 /**
@@ -319,4 +321,22 @@ export function updateSchedulePeriod(period: string, room: string): void {
     schedule.push({ period, room })
   }
   setItem(STORAGE_KEYS.SCHEDULE, schedule)
+}
+
+// ========== Map Preferences ==========
+
+/**
+ * Return the last floor selected on the map, if one has been saved.
+ *
+ * Validation against the currently available floors belongs to the map module,
+ * which owns the floor configuration.
+ */
+export function getSelectedFloor(): string | null {
+  const floor = getItem<unknown>(STORAGE_KEYS.SELECTED_FLOOR, null)
+  return typeof floor === 'string' ? floor : null
+}
+
+/** Save the floor that should be restored the next time the map opens. */
+export function saveSelectedFloor(floorId: string): void {
+  setItem(STORAGE_KEYS.SELECTED_FLOOR, floorId)
 }

@@ -19,6 +19,7 @@ import { t } from '../utils/i18n'
 import type { Node, Wall, TrafficZone } from '../utils/types'
 import { MAP_CONFIG, FLOORS, getDataUrl } from '../utils/constants'
 import { graphLogger, logger } from '../utils/logger'
+import { getSelectedFloor, saveSelectedFloor } from '../utils/storage'
 import { state } from './map-state'
 
 type JsonObject = Record<string, unknown>
@@ -403,7 +404,11 @@ export function initMap(callbacks: MapInitCallbacks): void {
     [0, IMAGE_WIDTH],
   ]
 
-  state.currentFloor = FLOORS.DEFAULT
+  const savedFloor = getSelectedFloor()
+  state.currentFloor =
+    savedFloor && FLOORS.AVAILABLE.some((floor) => floor.id === savedFloor)
+      ? savedFloor
+      : FLOORS.DEFAULT
 
   const mapOptions: L.MapOptions & { tap?: boolean } = {
     crs: L.CRS.Simple,
@@ -428,6 +433,8 @@ export function initMap(callbacks: MapInitCallbacks): void {
   state.map = leafletMap
 
   leafletMap.setMaxBounds(bounds)
+
+  updateFloorUi(state.currentFloor)
 
   // Load initial floor image
   const initialFloor = FLOORS.AVAILABLE.find((f) => f.id === state.currentFloor)
@@ -480,10 +487,12 @@ function prefetchFloorImages(): void {
  * redraw any active multi-floor route for the new floor.
  */
 export function switchFloor(floorId: string): void {
-  if (floorId === state.currentFloor) return
+  if (floorId === state.currentFloor || !FLOORS.AVAILABLE.some((floor) => floor.id === floorId))
+    return
 
   graphLogger.info(`Switching to floor ${floorId}`)
   state.currentFloor = floorId
+  saveSelectedFloor(floorId)
   document.title = `Fremd Maps - Floor ${floorId}`
 
   const floor = FLOORS.AVAILABLE.find((f) => f.id === floorId)
@@ -516,14 +525,18 @@ export function switchFloor(floorId: string): void {
     _cb.clearRoute()
   }
 
-  const floorLabel = document.querySelector('.floor-label')
-  if (floorLabel) floorLabel.textContent = t('floor.label', { floor: floorId })
+  updateFloorUi(floorId)
 
   void loadData()
 
   if (hasMultiFloorRoute) {
     _cb.redrawRouteForCurrentFloor()
   }
+}
+
+function updateFloorUi(floorId: string): void {
+  const floorLabel = document.querySelector('.floor-label')
+  if (floorLabel) floorLabel.textContent = t('floor.label', { floor: floorId })
 
   document.querySelectorAll('.floor-btn').forEach((btn) => {
     const htmlBtn = btn as HTMLElement
