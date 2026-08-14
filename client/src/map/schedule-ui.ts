@@ -272,7 +272,7 @@ function renderPeriods(): void {
     navigate.addEventListener('click', () => {
       const room = input.value.trim()
       if (!room) return
-      const endInput = document.getElementById('end-input') as HTMLInputElement | null
+      const endInput = document.querySelector<HTMLInputElement>('#end-input')
       if (endInput) {
         endInput.value = room
         state.selectedEndNode = null
@@ -368,7 +368,11 @@ function renderPaths(): void {
 }
 
 /** Attach the schedule modal once after the navigation panel has rendered. */
-export function setupScheduleModal(graphGetter: () => Graph | null): { cleanup: () => void } {
+interface ScheduleModalController {
+  cleanup: () => void
+}
+
+export function setupScheduleModal(graphGetter: () => Graph | null): ScheduleModalController {
   setupController?.abort()
   setupController = new AbortController()
   const signal = setupController.signal

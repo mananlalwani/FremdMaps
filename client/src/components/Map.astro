@@ -134,7 +134,7 @@ import '../styles/map.css'
   function setNavButtonsDisabled(disabled: boolean): void {
     const ids = ['find-route-btn', 'clear-route-btn', 'find-bathroom-btn']
     for (const id of ids) {
-      const btn = document.getElementById(id) as HTMLButtonElement | null
+      const btn = document.querySelector<HTMLButtonElement>(`#${id}`)
       if (btn) btn.disabled = disabled
     }
   }

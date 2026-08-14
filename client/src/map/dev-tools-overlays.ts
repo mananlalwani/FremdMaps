@@ -17,12 +17,12 @@ interface GraphControls extends RouteControls {
   getGraph(): Graph | null
 }
 
-const NODE_COLORS: Record<string, string> = {
+const NODE_COLORS = {
   room: '#4ade80',
   waypoint: '#6b7280',
   bathroom: '#60a5fa',
   stairway: '#a78bfa',
-}
+} satisfies Record<string, string>
 
 /** Create independent Leaflet overlay controls for the lazy-loaded developer menu. */
 export function createDevOverlayControls(routeControls: GraphControls): DevOverlayControls {
@@ -90,7 +90,7 @@ export function createDevOverlayControls(routeControls: GraphControls): DevOverl
     nodeLayerGroup = removeLayers(nodeLayerGroup)
     nodeLayerGroup = L.layerGroup().addTo(state.map)
     for (const node of state.collectedNodes) {
-      const color = NODE_COLORS[node.type ?? 'room'] ?? NODE_COLORS.room
+      const color = NODE_COLORS[node.type ?? 'room']
       const marker = L.circleMarker([node.lat, node.lng], {
         radius: node.type === 'waypoint' ? 2 : 4,
         color,

@@ -22,16 +22,16 @@ describe('setupScheduleModal', () => {
       <div id="schedule-periods-list"></div><div id="schedule-paths-list"></div>
     `
     setupScheduleModal(() => null)
-    const trigger = document.getElementById('schedule-btn') as HTMLButtonElement
+    const trigger = document.querySelector<HTMLButtonElement>('#schedule-btn')!
     const modal = document.getElementById('schedule-modal')!
     trigger.click()
 
     expect(modal.style.display).toBe('block')
-    expect((document.getElementById('map') as HTMLElement).inert).toBe(true)
+    expect(document.querySelector<HTMLElement>('#map')!.inert).toBe(true)
     modal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
 
     expect(modal.style.display).toBe('none')
-    expect((document.getElementById('map') as HTMLElement).inert).toBe(false)
+    expect(document.querySelector<HTMLElement>('#map')!.inert).toBe(false)
     expect(document.activeElement).toBe(trigger)
   })
 
@@ -56,8 +56,8 @@ describe('setupScheduleModal', () => {
       },
     ]
     setupScheduleModal(() => null)
-    ;(document.getElementById('schedule-btn') as HTMLButtonElement).click()
-    ;(document.getElementById('schedule-edit-btn') as HTMLButtonElement).click()
+    document.querySelector<HTMLButtonElement>('#schedule-btn')!.click()
+    document.querySelector<HTMLButtonElement>('#schedule-edit-btn')!.click()
 
     const input = document.querySelector<HTMLInputElement>('.schedule-period-input')!
     input.value = '12'

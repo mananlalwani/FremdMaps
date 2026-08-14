@@ -224,7 +224,7 @@ export function redrawRouteForCurrentFloor(): void {
       floorWalls
     )
     routeLogger.log('Segment simplified length:', simplified.length)
-    const coords = simplified.map((n) => [n.lat, n.lng] as [number, number])
+    const coords: Array<[number, number]> = simplified.map((n) => [n.lat, n.lng])
 
     const routeOutline = L.polyline(coords, {
       color: '#000',
@@ -314,7 +314,7 @@ export function redrawRouteForCurrentFloor(): void {
   }
 
   // Fit map to visible route
-  const allVisibleCoords = segments.flat().map((n) => [n.lat, n.lng] as [number, number])
+  const allVisibleCoords: Array<[number, number]> = segments.flat().map((n) => [n.lat, n.lng])
   if (allVisibleCoords.length > 0) {
     state.map.fitBounds(L.latLngBounds(allVisibleCoords), { padding: [100, 100] })
 
@@ -353,8 +353,8 @@ export function clearRoute(): void {
   state.routeMarkers = []
 
   const routeStatus = document.getElementById('route-status')
-  const startInput = document.getElementById('start-input') as HTMLInputElement | null
-  const endInput = document.getElementById('end-input') as HTMLInputElement | null
+  const startInput = document.querySelector<HTMLInputElement>('#start-input')
+  const endInput = document.querySelector<HTMLInputElement>('#end-input')
   const directionsList = document.getElementById('directions-list')
 
   if (routeStatus && routeStatus.style.display !== 'none') {

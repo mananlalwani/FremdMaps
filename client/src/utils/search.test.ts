@@ -288,6 +288,7 @@ describe('getCategoryLabel', () => {
   })
 
   it('returns "Unknown" for unrecognised category', () => {
+    // SAFETY: this test deliberately exercises the runtime fallback outside the public category union.
     expect(getCategoryLabel('nonexistent' as never)).toBe('Unknown')
   })
 })
@@ -314,6 +315,7 @@ describe('getCategoryIcon', () => {
   })
 
   it('returns "○" as fallback for unrecognised category', () => {
+    // SAFETY: this test deliberately exercises the runtime fallback outside the public category union.
     expect(getCategoryIcon('nonexistent' as never)).toBe('○')
   })
 })

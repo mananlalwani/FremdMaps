@@ -5,7 +5,8 @@
  * escaping, bearing helpers, and angle calculations.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import L from 'leaflet'
 import type { Node } from '../utils/types'
 
 // Import the module to test
@@ -123,7 +124,7 @@ describe('clearRoute', () => {
       <div id="route-status" style="display: block;"></div>
       <div id="directions-list"></div>
     `
-    state.map = { removeLayer: vi.fn() } as unknown as typeof state.map
+    state.map = L.map(document.createElement('div'))
     state.currentRoute = null
     state.routeMarkers = []
   })

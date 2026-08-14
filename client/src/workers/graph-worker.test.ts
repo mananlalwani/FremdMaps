@@ -17,6 +17,6 @@ describe('graph-worker', () => {
 
   it('sets self.onmessage to a function', async () => {
     await import('./graph-worker')
-    expect(typeof (self as unknown as { onmessage: unknown }).onmessage).toBe('function')
+    expect(self.onmessage).toEqual(expect.any(Function))
   })
 })

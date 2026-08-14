@@ -1,14 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cancelPendingDataLoad, clearMapData } from './map-init'
 import { state } from './map-state'
-
-vi.mock('../utils/logger', () => ({
-  logger: { log: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), perf: vi.fn() },
-  graphLogger: { log: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), perf: vi.fn() },
-  searchLogger: { log: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), perf: vi.fn() },
-  routeLogger: { log: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), perf: vi.fn() },
-}))
 
 describe('clearMapData', () => {
   beforeEach(() => {

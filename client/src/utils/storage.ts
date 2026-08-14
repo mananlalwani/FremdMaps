@@ -18,6 +18,16 @@
 import type { SearchHistoryEntry, ScheduleEntry } from './types'
 import { logger } from './logger'
 
+type StoredValue =
+  | string
+  | number
+  | boolean
+  | null
+  | string[]
+  | SearchHistoryEntry[]
+  | ScheduleEntry[]
+  | SearchAnalyticsEntry[]
+
 const STORAGE_KEYS = {
   RECENT_SEARCHES: 'nav_recent_searches',
   FAVORITES: 'nav_favorites',
@@ -73,6 +83,7 @@ function getItem<T>(key: string, defaultValue: T): T {
   try {
     const item = localStorage.getItem(key)
     if (!item) return defaultValue
+    // SAFETY: this helper is called only with the caller's typed fallback contract.
     return JSON.parse(item) as T
   } catch (e) {
     logger.warn(`Failed to read from localStorage: ${key}`, e)
@@ -91,7 +102,7 @@ function getItem<T>(key: string, defaultValue: T): T {
  * @param value Value to serialise as JSON.
  * @returns `true` on success, `false` on failure.
  */
-function setItem(key: string, value: unknown): boolean {
+function setItem(key: string, value: StoredValue): boolean {
   if (!isStorageAvailable()) return false
 
   try {
@@ -332,8 +343,7 @@ export function updateSchedulePeriod(period: string, room: string): void {
  * which owns the floor configuration.
  */
 export function getSelectedFloor(): string | null {
-  const floor = getItem<unknown>(STORAGE_KEYS.SELECTED_FLOOR, null)
-  return typeof floor === 'string' ? floor : null
+  return getItem<string | null>(STORAGE_KEYS.SELECTED_FLOOR, null)
 }
 
 /** Save the floor that should be restored the next time the map opens. */

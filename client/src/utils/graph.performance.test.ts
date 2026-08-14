@@ -8,11 +8,14 @@ import type { Node, TrafficZone } from './types'
 
 async function readJson<T>(relativePath: string): Promise<T> {
   const file = new URL(`../../public/${relativePath}`, import.meta.url)
-  // @ts-expect-error Node's file API is available in Vitest, while the browser-only client tsconfig
-  // intentionally omits Node type declarations.
-  const fileSystem = (await import('node:fs/promises')) as unknown as {
+  // SAFETY: Vitest provides Node's fs promises module although the browser tsconfig omits its declarations.
+  const fileSystem = (await (
+    // @ts-expect-error Node's file API is available in Vitest, while the browser-only client tsconfig omits it.
+    import('node:fs/promises')
+  )) as {
     readFile: (path: URL, encoding: 'utf8') => Promise<string>
   }
+  // SAFETY: callers provide the checked-in fixture contract they expect to read.
   return JSON.parse(await fileSystem.readFile(file, 'utf8')) as T
 }
 

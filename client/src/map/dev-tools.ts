@@ -20,6 +20,30 @@ let _cb: DevToolsCallbacks
 let devToolsController: AbortController | null = null
 let overlayControls: DevOverlayControls | null = null
 
+type EditableNodeType = NonNullable<Node['type']>
+type SerializedNode = Pick<Node, 'uid' | 'rooms' | 'lat' | 'lng'> &
+  Partial<Pick<Node, 'type' | 'bathroomType' | 'category' | 'connectsTo'>>
+type DownloadableData = Node[] | number[][][] | TrafficZone[]
+
+function isEditableNodeType(value: string): value is EditableNodeType {
+  return ['room', 'waypoint', 'bathroom', 'stairway'].some((type) => type === value)
+}
+
+function isFormString(value: FormDataEntryValue | null): value is string {
+  return typeof value === 'string'
+}
+
+function getFormString(data: FormData, name: string): string {
+  const value = data.get(name)
+  return isFormString(value) ? value : ''
+}
+
+function getRequiredElement<T extends Element>(parent: ParentNode, selector: string): T {
+  const element = parent.querySelector<T>(selector)
+  if (!element) throw new Error(`Missing required editor element: ${selector}`)
+  return element
+}
+
 function markNavigationDataChanged(): void {
   state.graphDataRevision += 1
   invalidateSearchCache()
@@ -201,7 +225,7 @@ function btn(label: string, onClick: () => void, style?: string): HTMLButtonElem
   b.addEventListener('mouseleave', () => {
     b.style.background = 'rgba(255,255,255,0.06)'
   })
-  b.addEventListener('click', onClick as (e: MouseEvent) => void)
+  b.addEventListener('click', () => onClick())
   return b
 }
 
@@ -337,17 +361,17 @@ function exportFloorData(): void {
   const nodes = state.allNodesAllFloors
     .filter((n) => n.floor === floor)
     .map((n) => {
-      const obj: Record<string, unknown> = {
+      const serializedNode: SerializedNode = {
         uid: n.uid,
         rooms: n.rooms,
         lat: n.lat,
         lng: n.lng,
       }
-      if (n.type) obj.type = n.type
-      if (n.bathroomType) obj.bathroomType = n.bathroomType
-      if (n.category) obj.category = n.category
-      if (n.connectsTo && n.connectsTo.length > 0) obj.connectsTo = n.connectsTo
-      return obj
+      if (n.type) serializedNode.type = n.type
+      if (n.bathroomType) serializedNode.bathroomType = n.bathroomType
+      if (n.category) serializedNode.category = n.category
+      if (n.connectsTo && n.connectsTo.length > 0) serializedNode.connectsTo = n.connectsTo
+      return serializedNode
     })
 
   // Convert walls back to raw [[lat,lng],[lat,lng]] format
@@ -376,7 +400,7 @@ function exportFloorData(): void {
   logger.log(`[Dev] Exported floor ${floor} data (3 files)`)
 }
 
-function downloadJson(data: unknown, _pathHint: string, filename: string): void {
+function downloadJson(data: DownloadableData, _pathHint: string, filename: string): void {
   const json = JSON.stringify(data, null, 2)
   const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -462,7 +486,9 @@ function buildPathTweaks(): HTMLElement {
 
   const applyBtn = btn('Apply & rebuild', () => {
     void (async () => {
-      ;(MAP_CONFIG as { MAX_HALLWAY_DISTANCE: number }).MAX_HALLWAY_DISTANCE = Number(
+      // SAFETY: developer tools intentionally override this otherwise immutable session-only setting.
+      const mutableMapConfig = MAP_CONFIG as { MAX_HALLWAY_DISTANCE: number }
+      mutableMapConfig.MAX_HALLWAY_DISTANCE = Number(
         distSlider.value
       )
       markNavigationDataChanged()
@@ -569,21 +595,21 @@ function refreshZoneList(): void {
         </div>`
     )
     .join('')
-  const editBtns = list.querySelectorAll('.dev-zone-edit')
+  const editBtns = list.querySelectorAll<HTMLButtonElement>('.dev-zone-edit')
   for (let i = 0; i < editBtns.length; i++) {
-    const idx = parseInt((editBtns[i] as HTMLElement).dataset.idx ?? '', 10)
+    const idx = parseInt(editBtns[i].dataset.idx ?? '', 10)
     const zone = zones[idx]
-    const btn = editBtns[i] as HTMLButtonElement
+    const btn = editBtns[i]
     btn.addEventListener('click', () => {
       setEditorMode('none')
       showEditZoneForm(zone)
     })
   }
-  const delBtns = list.querySelectorAll('.dev-zone-del')
+  const delBtns = list.querySelectorAll<HTMLButtonElement>('.dev-zone-del')
   for (let i = 0; i < delBtns.length; i++) {
-    const idx = parseInt((delBtns[i] as HTMLElement).dataset.idx ?? '', 10)
+    const idx = parseInt(delBtns[i].dataset.idx ?? '', 10)
     const zone = zones[idx]
-    const btn = delBtns[i] as HTMLButtonElement
+    const btn = delBtns[i]
     btn.addEventListener('click', () => {
       setEditorMode('none')
       confirmDeleteZone(zone)
@@ -730,11 +756,11 @@ function showEditZoneForm(zone: TrafficZone): void {
   </div>
 </form>
 `
-  const form = panel.querySelector('#dev-edit-zone-form') as HTMLFormElement
+  const form = getRequiredElement<HTMLFormElement>(panel, '#dev-edit-zone-form')
   form.addEventListener('submit', (e) => {
     e.preventDefault()
     const fd = new FormData(form)
-    zone.intensity = parseFloat((fd.get('intensity') as string) || '2')
+    zone.intensity = parseFloat(getFormString(fd, 'intensity') || '2')
     markNavigationDataChanged()
     void _cb.initializeNavigation()
     clearHighlight()
@@ -899,7 +925,7 @@ function showAddWallForm(start: Wall['start'], end: Wall['end']): void {
   </div>
 </form>
 `
-  const form = panel.querySelector('#dev-add-wall-form') as HTMLFormElement
+  const form = getRequiredElement<HTMLFormElement>(panel, '#dev-add-wall-form')
   form.addEventListener('submit', (event) => {
     event.preventDefault()
     state.wallObjects.push({ start, end, floor: state.currentFloor })
@@ -932,7 +958,7 @@ function showEditWallForm(wall: Wall): void {
   </div>
 </form>
 `
-  const form = panel.querySelector('#dev-edit-wall-form') as HTMLFormElement
+  const form = getRequiredElement<HTMLFormElement>(panel, '#dev-edit-wall-form')
   form.addEventListener('submit', (event) => {
     event.preventDefault()
     const values = new FormData(form)
@@ -1052,12 +1078,12 @@ function showNodeForm(latlng: L.LatLng): void {
   </div>
 </form>
 `
-  const form = panel.querySelector('#dev-add-node-form') as HTMLFormElement
+  const form = getRequiredElement<HTMLFormElement>(panel, '#dev-add-node-form')
   form.addEventListener('submit', (e) => {
     e.preventDefault()
     const fd = new FormData(form)
-    const roomsRaw = (fd.get('rooms') as string) || ''
-    const nodeType = (fd.get('type') as string) || 'room'
+    const roomsRaw = getFormString(fd, 'rooms')
+    const nodeType = getFormString(fd, 'type') || 'room'
     const rooms = roomsRaw
       .split(',')
       .map((s) => s.trim())
@@ -1068,7 +1094,7 @@ function showNodeForm(latlng: L.LatLng): void {
       rooms: rooms.length > 0 ? rooms : ['New Node'],
       lat: latlng.lat,
       lng: latlng.lng,
-      type: nodeType as Node['type'],
+      type: isEditableNodeType(nodeType) ? nodeType : 'room',
       floor: state.currentFloor,
     }
 
@@ -1113,22 +1139,22 @@ function showEditForm(node: Node): void {
   </div>
 </form>
 `
-  const form = panel.querySelector('#dev-edit-node-form') as HTMLFormElement
+  const form = getRequiredElement<HTMLFormElement>(panel, '#dev-edit-node-form')
   form.addEventListener('submit', (e) => {
     e.preventDefault()
     const fd = new FormData(form)
-    const rooms = ((fd.get('rooms') as string) || '')
+    const rooms = getFormString(fd, 'rooms')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
-    const lat = parseFloat(fd.get('lat') as string)
-    const lng = parseFloat(fd.get('lng') as string)
-    const nodeType = (fd.get('type') as string) || 'room'
+    const lat = parseFloat(getFormString(fd, 'lat'))
+    const lng = parseFloat(getFormString(fd, 'lng'))
+    const nodeType = getFormString(fd, 'type') || 'room'
 
     if (!isNaN(lat)) node.lat = lat
     if (!isNaN(lng)) node.lng = lng
     if (rooms.length > 0) node.rooms = rooms
-    node.type = nodeType as Node['type']
+    node.type = isEditableNodeType(nodeType) ? nodeType : 'room'
 
     markNavigationDataChanged()
     void _cb.initializeNavigation()
@@ -1227,11 +1253,11 @@ function handleZoneClick(latlng: L.LatLng): void {
   </div>
 </form>
 `
-  const form = panel.querySelector('#dev-add-zone-form') as HTMLFormElement
+  const form = getRequiredElement<HTMLFormElement>(panel, '#dev-add-zone-form')
   form.addEventListener('submit', (e) => {
     e.preventDefault()
     const fd = new FormData(form)
-    const intensity = parseFloat((fd.get('intensity') as string) || '2')
+    const intensity = parseFloat(getFormString(fd, 'intensity') || '2')
 
     const zone: TrafficZone = {
       uid: uuid(),

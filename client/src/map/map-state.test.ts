@@ -96,8 +96,6 @@ describe('map-state mutations', () => {
   })
 
   it('propagates null assignments', () => {
-    state.map = {} as unknown as L.Map
-    expect(state.map).not.toBeNull()
     state.map = null
     expect(state.map).toBeNull()
   })

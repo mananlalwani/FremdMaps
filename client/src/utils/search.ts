@@ -15,7 +15,7 @@ import { SEARCH_CONFIG } from '../config/featured'
 import { t } from './i18n'
 import type { Node, SearchResult, RoomCategory } from './types'
 
-const SPANISH_ROOM_ALIASES: Record<string, string[]> = {
+const SPANISH_ROOM_ALIASES = new Map(Object.entries({
   'attendance office': ['oficina de asistencia'],
   auditorium: ['auditorio'],
   "boy's locker room": ['vestidor de niños', 'vestuario masculino'],
@@ -41,7 +41,7 @@ const SPANISH_ROOM_ALIASES: Record<string, string[]> = {
   'weight room': ['sala de pesas'],
   wrestling: ['lucha'],
   bathroom: ['baño', 'bano', 'baños', 'banos', 'sanitario', 'sanitarios'],
-}
+} satisfies Record<string, string[]>))
 
 /** Normalize user search terms without changing the official displayed room labels. */
 function normalizeSearchTerm(value: string): string {
@@ -57,7 +57,7 @@ function normalizeSearchTerm(value: string): string {
 
 function getSearchAliases(node: Node): string[] {
   const translatedAliases = node.rooms.flatMap(
-    (room) => SPANISH_ROOM_ALIASES[room.trim().toLowerCase()] ?? []
+    (room) => SPANISH_ROOM_ALIASES.get(room.trim().toLowerCase()) ?? []
   )
   const punctuationAliases = node.rooms
     .map((room) => ({ original: room.trim().toLowerCase(), normalized: normalizeSearchTerm(room) }))
@@ -143,20 +143,32 @@ export function inferCategory(node: Node): RoomCategory {
  * @returns Capitalised label string, e.g. `'Classroom'`, `'Gymnasium'`.
  */
 export function getCategoryLabel(category: RoomCategory): string {
-  const labels: Partial<Record<RoomCategory, Parameters<typeof t>[0]>> = {
-    classroom: 'category.classroom',
-    office: 'category.office',
-    lab: 'category.lab',
-    bathroom: 'category.bathroom',
-    cafeteria: 'category.cafeteria',
-    gymnasium: 'category.gymnasium',
-    library: 'category.library',
-    auditorium: 'category.auditorium',
-    stairway: 'category.stairway',
-    entrance: 'category.entrance',
-    other: 'category.other',
+  switch (category) {
+    case 'classroom':
+      return t('category.classroom')
+    case 'office':
+      return t('category.office')
+    case 'lab':
+      return t('category.lab')
+    case 'bathroom':
+      return t('category.bathroom')
+    case 'cafeteria':
+      return t('category.cafeteria')
+    case 'gymnasium':
+      return t('category.gymnasium')
+    case 'library':
+      return t('category.library')
+    case 'auditorium':
+      return t('category.auditorium')
+    case 'stairway':
+      return t('category.stairway')
+    case 'entrance':
+      return t('category.entrance')
+    case 'other':
+      return t('category.other')
+    default:
+      return t('category.unknown')
   }
-  return t(labels[category] ?? 'category.unknown')
 }
 
 /**
@@ -167,7 +179,7 @@ export function getCategoryLabel(category: RoomCategory): string {
  * @returns A Unicode symbol character, e.g. `'▪'` for classroom.
  */
 export function getCategoryIcon(category: RoomCategory): string {
-  const icons: Record<RoomCategory, string> = {
+  const icons = {
     classroom: '▪',
     office: '●',
     lab: '◆',
@@ -179,7 +191,7 @@ export function getCategoryIcon(category: RoomCategory): string {
     stairway: '▴',
     entrance: '▾',
     other: '○',
-  }
+  } satisfies Record<RoomCategory, string>
   return icons[category] || '○'
 }
 

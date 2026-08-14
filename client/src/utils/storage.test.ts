@@ -242,6 +242,7 @@ describe('trackSearch', () => {
     trackSearch('room 201', 5)
     const raw = localStorageMock.getItem('nav_search_analytics')
     expect(raw).not.toBeNull()
+    // SAFETY: trackSearch wrote this test-controlled localStorage payload.
     const data = JSON.parse(raw) as Array<{ query: string; resultCount: number }>
     expect(data).toHaveLength(2)
     expect(data[0]).toMatchObject({ query: 'library', resultCount: 3 })

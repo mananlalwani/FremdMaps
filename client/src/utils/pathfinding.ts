@@ -78,7 +78,8 @@ class PriorityQueue<T> {
     if (this.heap.length === 0) return undefined
     if (this.heap.length === 1) {
       const entry = this.heap.pop()
-      return (entry as { item: T }).item
+      if (!entry) return undefined
+      return entry.item
     }
 
     const min = this.heap[0]

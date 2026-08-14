@@ -24,7 +24,7 @@ describe('setupSearchUI', () => {
       <button id="recent-toggle-btn"></button><div id="recent-dropdown"></div><div id="recent-list"></div><button id="clear-recent-btn"></button>
     `
     setupSearchUI(() => undefined)
-    const input = document.getElementById('start-input') as HTMLInputElement
+    const input = document.querySelector<HTMLInputElement>('#start-input')!
     HTMLElement.prototype.scrollIntoView = () => undefined
     input.value = '101'
     input.dispatchEvent(new FocusEvent('focus'))
@@ -68,14 +68,14 @@ describe('setupSearchUI', () => {
       <button id="recent-toggle-btn"></button><div id="recent-dropdown"></div><div id="recent-list"></div><button id="clear-recent-btn"></button>
     `
     setupSearchUI(() => undefined)
-    const input = document.getElementById('end-input') as HTMLInputElement
+    const input = document.querySelector<HTMLInputElement>('#end-input')!
     input.value = 'Auditorium'
     input.dispatchEvent(new FocusEvent('focus'))
 
     const options = document.querySelectorAll('[role="option"]')
     expect(options).toHaveLength(1)
     expect(options[0].textContent).toContain('Floors 1 & 2')
-    ;(options[0] as HTMLButtonElement).click()
+    options[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
     expect(input.value).toBe('Auditorium')
     expect(state.selectedEndNode).toBeNull()
@@ -91,7 +91,7 @@ describe('setupSearchUI', () => {
       <button id="recent-toggle-btn"></button><div id="recent-dropdown"></div><div id="recent-list"></div><button id="clear-recent-btn"></button>
     `
     setupSearchUI(() => undefined)
-    const input = document.getElementById('end-input') as HTMLInputElement
+    const input = document.querySelector<HTMLInputElement>('#end-input')!
     input.value = 'Library'
     input.dispatchEvent(new FocusEvent('focus'))
 
@@ -115,7 +115,7 @@ describe('setupSearchUI', () => {
       <button id="recent-toggle-btn"></button><div id="recent-dropdown"></div><div id="recent-list"></div><button id="clear-recent-btn"></button>
     `
     setupSearchUI(() => undefined)
-    const input = document.getElementById('end-input') as HTMLInputElement
+    const input = document.querySelector<HTMLInputElement>('#end-input')!
     input.dispatchEvent(new FocusEvent('focus'))
 
     const firstSuggestion = document.querySelector('#end-results [role="option"]')

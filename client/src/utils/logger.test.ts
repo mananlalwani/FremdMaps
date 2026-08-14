@@ -82,6 +82,7 @@ describe('Logger', () => {
     devLogger.perf('build', performance.now())
 
     expect(console.log).toHaveBeenCalled()
+    // SAFETY: the immediately preceding spy replaces console.log with a Vitest mock.
     const mockLog = console.log as ReturnType<typeof vi.fn>
     const call: unknown = mockLog.mock.calls[0][0]
     expect(call).toMatch(/\[perf\] build: \d+\.\d{2}ms/)

@@ -2,10 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createGraphController } from './graph-controller'
 import type { Graph, Node } from '../utils/types'
 
-vi.mock('../utils/logger', () => ({
-  graphLogger: { log: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), perf: vi.fn() },
-}))
-
 class FakeWorker {
   static instances: FakeWorker[] = []
   onerror: ((event: ErrorEvent) => void) | null = null
@@ -23,7 +19,7 @@ class FakeWorker {
   terminate(): void {}
 
   respond(cacheKey: string, graph?: Graph, error?: string): void {
-    this.onmessage?.({ data: { cacheKey, graph, error } } as MessageEvent)
+    this.onmessage?.(new MessageEvent('message', { data: { cacheKey, graph, error } }))
   }
 }
 

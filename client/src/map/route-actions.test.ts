@@ -1,16 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { setupRouteActions } from './route-actions'
+import { setupRouteActions, type RouteActionDependencies } from './route-actions'
 import { state } from './map-state'
-import { findPath } from '../utils/pathfinding'
 
-vi.mock('../utils/i18n', () => ({ t: (key: string) => key }))
-vi.mock('../utils/pathfinding', () => ({ findNearestBathroom: vi.fn(), findPath: vi.fn() }))
-vi.mock('../utils/search', () => ({ searchNodes: vi.fn(() => []) }))
-vi.mock('../utils/storage', () => ({ addRecentSearch: vi.fn() }))
-vi.mock('./route-display', () => ({ displayRoute: vi.fn() }))
-
-const findPathMock = vi.mocked(findPath)
+const findPathMock = vi.fn()
+const dependencies: RouteActionDependencies = {
+  translate: (key) => key,
+  findPath: findPathMock,
+  findNearestBathroom: vi.fn(),
+  searchNodes: vi.fn(() => []),
+  addRecentSearch: vi.fn(),
+  displayRoute: vi.fn(),
+}
 
 beforeEach(() => {
   document.body.innerHTML = '<input id="start-input" value="101"><input id="end-input" value="102">'
@@ -34,6 +35,7 @@ describe('route action failure states', () => {
       collapsePanel: vi.fn(),
       refreshRecent: vi.fn(),
       showStatus,
+      dependencies,
     })
 
     actions.findRoute()
@@ -49,6 +51,7 @@ describe('route action failure states', () => {
       collapsePanel: vi.fn(),
       refreshRecent: vi.fn(),
       showStatus,
+      dependencies,
     })
 
     actions.findRoute()

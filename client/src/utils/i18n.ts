@@ -208,11 +208,14 @@ type TranslationValues = Record<string, string | number>
 let locale = readInitialLocale()
 
 function isLocale(value: string | null): value is Locale {
-  return value !== null && (SUPPORTED_LOCALES as readonly string[]).includes(value)
+  return value !== null && SUPPORTED_LOCALES.some((locale) => locale === value)
+}
+
+function isTranslationKey(value: string | undefined): value is TranslationKey {
+  return value !== undefined && value in translations.en
 }
 
 function readInitialLocale(): Locale {
-  if (typeof window === 'undefined') return 'en'
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (isLocale(stored)) return stored
@@ -247,18 +250,22 @@ export function setLocale(nextLocale: Locale): void {
 export function applyTranslations(root: ParentNode = document): void {
   document.documentElement.lang = locale
   root.querySelectorAll<HTMLElement>('[data-i18n]').forEach((element) => {
-    element.textContent = t(element.dataset.i18n as TranslationKey)
+    if (isTranslationKey(element.dataset.i18n)) element.textContent = t(element.dataset.i18n)
   })
   root.querySelectorAll<HTMLElement>('[data-i18n-placeholder]').forEach((element) => {
     if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
-      element.placeholder = t(element.dataset.i18nPlaceholder as TranslationKey)
+      if (isTranslationKey(element.dataset.i18nPlaceholder)) {
+        element.placeholder = t(element.dataset.i18nPlaceholder)
+      }
     }
   })
   root.querySelectorAll<HTMLElement>('[data-i18n-aria-label]').forEach((element) => {
-    element.setAttribute('aria-label', t(element.dataset.i18nAriaLabel as TranslationKey))
+    if (isTranslationKey(element.dataset.i18nAriaLabel)) {
+      element.setAttribute('aria-label', t(element.dataset.i18nAriaLabel))
+    }
   })
   root.querySelectorAll<HTMLElement>('[data-i18n-title]').forEach((element) => {
-    element.title = t(element.dataset.i18nTitle as TranslationKey)
+    if (isTranslationKey(element.dataset.i18nTitle)) element.title = t(element.dataset.i18nTitle)
   })
 }
 

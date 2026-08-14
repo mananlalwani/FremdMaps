@@ -45,6 +45,7 @@ class Logger {
   private config: LoggerConfig
 
   constructor(config?: Partial<LoggerConfig>) {
+    // SAFETY: Astro/Vite supplies import.meta.env; this local type exposes it in plain TypeScript.
     const envIsDevelopment = Boolean((import.meta as { env: Record<string, string> }).env.DEV)
     const isDevelopment = config?.isDevelopment ?? envIsDevelopment
 

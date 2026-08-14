@@ -22,7 +22,7 @@ function makeNode(
 /**
  * Build a simple graph: A─B─C (linear chain, cost = distance)
  */
-function makeLinearGraph(): { nodes: Node[]; graph: Graph } {
+function makeLinearGraph() {
   const A = makeNode('A', 0, 0, ['Room A'])
   const B = makeNode('B', 0, 100, ['Room B'])
   const C = makeNode('C', 0, 200, ['Room C'])

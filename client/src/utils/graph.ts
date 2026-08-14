@@ -405,13 +405,15 @@ function addStairwayConnections(nodes: Node[], graph: Graph): void {
  * @param graph The graph to analyse.
  * @returns Object with node count, unique edge count, and degree statistics.
  */
-export function getGraphStats(graph: Graph): {
+export interface GraphStats {
   nodes: number
   edges: number
   avgDegree: number
   maxDegree: number
   minDegree: number
-} {
+}
+
+export function getGraphStats(graph: Graph): GraphStats {
   const nodes = graph.size
   let totalDegree = 0
   let maxDegree = 0

@@ -69,10 +69,10 @@ export function setupPanelBehavior(): PanelBehavior {
     document.addEventListener(
       'focusin',
       (event) => {
-        const target = event.target as Element | null
+        const target = event.target instanceof Element ? event.target : null
         if (!target?.matches(activeInputSelector)) return
         window.setTimeout(() => {
-          ;(target as HTMLElement).scrollIntoView({ block: 'center', behavior: 'smooth' })
+          target.scrollIntoView({ block: 'center', behavior: 'smooth' })
         }, 120)
         applyKeyboardInset()
       },

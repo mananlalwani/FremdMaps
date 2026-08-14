@@ -3,10 +3,8 @@ import { applyTranslations, getLocale, setLocale } from '../utils/i18n'
 const STORAGE_KEY = 'wayfinder_onboarded'
 
 const overlay = document.getElementById('onboarding-overlay')
-const dismissBtn = document.getElementById('onboarding-dismiss') as HTMLButtonElement | null
-const languageSelect = document.getElementById(
-  'onboarding-language-select'
-) as HTMLSelectElement | null
+const dismissBtn = document.querySelector<HTMLButtonElement>('#onboarding-dismiss')
+const languageSelect = document.querySelector<HTMLSelectElement>('#onboarding-language-select')
 
 if (languageSelect) languageSelect.value = getLocale()
 
@@ -48,9 +46,7 @@ languageSelect?.addEventListener('change', () => {
   const locale = languageSelect.value === 'es' ? 'es' : 'en'
   setLocale(locale)
   applyTranslations()
-  const headerLanguageSelect = document.getElementById(
-    'language-select'
-  ) as HTMLSelectElement | null
+  const headerLanguageSelect = document.querySelector<HTMLSelectElement>('#language-select')
   if (headerLanguageSelect) headerLanguageSelect.value = locale
 })
 

@@ -22,19 +22,47 @@ import { graphLogger, logger } from '../utils/logger'
 import { getSelectedFloor, saveSelectedFloor } from '../utils/storage'
 import { state } from './map-state'
 
-type JsonObject = Record<string, unknown>
+type JsonValue = string | number | boolean | null | JsonObject | JsonValue[]
+type JsonInput = JsonValue | undefined
+interface JsonObject {
+  [key: string]: JsonValue | undefined
+}
 
-function isObject(value: unknown): value is JsonObject {
+async function readJson(response: Response): Promise<JsonValue> {
+  // SAFETY: the parser functions below validate this untrusted JSON before use.
+  return (await response.json()) as JsonValue
+}
+
+function hasRequestIdleCallback(
+  target: Window
+): target is Window & { requestIdleCallback: (cb: () => void, options?: { timeout: number }) => number } {
+  return 'requestIdleCallback' in target
+}
+
+function isObject(value: JsonInput): value is JsonObject {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function isNodeType(value: unknown): value is NonNullable<Node['type']> {
+function isNodeType(value: JsonInput): value is NonNullable<Node['type']> {
   return value === 'room' || value === 'waypoint' || value === 'bathroom' || value === 'stairway'
 }
 
-const VALID_BATHROOM_TYPES = new Set<string>(['all-gender', 'mens', 'womens', 'accessible'])
+function isFiniteNumber(value: JsonInput): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
 
-const VALID_CATEGORIES = new Set<string>([
+function isNonEmptyString(value: JsonInput): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+const VALID_BATHROOM_TYPES = new Set<NonNullable<Node['bathroomType']>>([
+  'all-gender',
+  'mens',
+  'womens',
+  'accessible',
+])
+
+const VALID_CATEGORIES = new Set<NonNullable<Node['category']>>([
   'classroom',
   'office',
   'lab',
@@ -48,15 +76,23 @@ const VALID_CATEGORIES = new Set<string>([
   'other',
 ])
 
-function assertFiniteNumber(value: unknown, label: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
+function isBathroomType(value: string): value is NonNullable<Node['bathroomType']> {
+  return Array.from(VALID_BATHROOM_TYPES).some((type) => type === value)
+}
+
+function isCategory(value: string): value is NonNullable<Node['category']> {
+  return Array.from(VALID_CATEGORIES).some((category) => category === value)
+}
+
+function assertFiniteNumber(value: JsonInput, label: string): number {
+  if (!isFiniteNumber(value)) {
     throw new Error(`${label} must be a finite number`)
   }
   return value
 }
 
-function assertNonEmptyString(value: unknown, label: string): string {
-  if (typeof value !== 'string' || value.trim().length === 0) {
+function assertNonEmptyString(value: JsonInput, label: string): string {
+  if (!isNonEmptyString(value)) {
     throw new Error(`${label} must be a non-empty string`)
   }
   return value
@@ -71,11 +107,11 @@ function assertCoordinateBounds(lat: number, lng: number, label: string): void {
   }
 }
 
-export function parseNodes(value: unknown, floorId: string, contextLabel: string): Node[] {
+export function parseNodes(value: JsonValue, floorId: string, contextLabel: string): Node[] {
   if (!Array.isArray(value)) {
     throw new Error(`${contextLabel} must be an array`)
   }
-  const data: unknown[] = value
+  const data: JsonValue[] = value
 
   const nodes: Node[] = []
   const seenUids = new Set<string>()
@@ -96,10 +132,11 @@ export function parseNodes(value: unknown, floorId: string, contextLabel: string
     const lng = assertFiniteNumber(rawNode.lng, `${label}.lng`)
     assertCoordinateBounds(lat, lng, label)
 
-    if (!Array.isArray(rawNode.rooms) || rawNode.rooms.length === 0) {
+    const rawRooms = rawNode.rooms
+    if (!Array.isArray(rawRooms) || rawRooms.length === 0) {
       throw new Error(`${label}.rooms must be a non-empty array`)
     }
-    const rooms = rawNode.rooms.map((room, roomIndex) =>
+    const rooms = rawRooms.map((room, roomIndex) =>
       assertNonEmptyString(room, `${label}.rooms[${roomIndex}]`)
     )
 
@@ -112,42 +149,44 @@ export function parseNodes(value: unknown, floorId: string, contextLabel: string
 
     if (type !== undefined) node.type = type
 
-    if (rawNode.searchAliases !== undefined) {
-      if (!Array.isArray(rawNode.searchAliases)) {
+    const rawSearchAliases = rawNode.searchAliases
+    if (rawSearchAliases !== undefined) {
+      if (!Array.isArray(rawSearchAliases)) {
         throw new Error(`${label}.searchAliases must be an array when present`)
       }
-      node.searchAliases = rawNode.searchAliases.map((alias, aliasIndex) =>
+      node.searchAliases = rawSearchAliases.map((alias, aliasIndex) =>
         assertNonEmptyString(alias, `${label}.searchAliases[${aliasIndex}]`)
       )
     }
 
-    if (rawNode.connectsTo !== undefined) {
-      if (!Array.isArray(rawNode.connectsTo)) {
+    const rawConnectsTo = rawNode.connectsTo
+    if (rawConnectsTo !== undefined) {
+      if (!Array.isArray(rawConnectsTo)) {
         throw new Error(`${label}.connectsTo must be an array when present`)
       }
-      node.connectsTo = rawNode.connectsTo.map((target, targetIndex) =>
+      node.connectsTo = rawConnectsTo.map((target, targetIndex) =>
         assertNonEmptyString(target, `${label}.connectsTo[${targetIndex}]`)
       )
     }
 
     if (rawNode.bathroomType !== undefined) {
       const bathroomType = assertNonEmptyString(rawNode.bathroomType, `${label}.bathroomType`)
-      if (!VALID_BATHROOM_TYPES.has(bathroomType)) {
+      if (!isBathroomType(bathroomType)) {
         throw new Error(
           `${label}.bathroomType must be one of: ${Array.from(VALID_BATHROOM_TYPES).join(', ')}`
         )
       }
-      node.bathroomType = bathroomType as Node['bathroomType']
+      node.bathroomType = bathroomType
     }
 
     if (rawNode.category !== undefined) {
       const category = assertNonEmptyString(rawNode.category, `${label}.category`)
-      if (!VALID_CATEGORIES.has(category)) {
+      if (!isCategory(category)) {
         throw new Error(
           `${label}.category must be one of: ${Array.from(VALID_CATEGORIES).join(', ')}`
         )
       }
-      node.category = category as Node['category']
+      node.category = category
     }
 
     nodes.push(node)
@@ -156,11 +195,11 @@ export function parseNodes(value: unknown, floorId: string, contextLabel: string
   return nodes
 }
 
-export function parseWalls(value: unknown, contextLabel: string): number[][][] {
+export function parseWalls(value: JsonValue, contextLabel: string): number[][][] {
   if (!Array.isArray(value)) {
     throw new Error(`${contextLabel} must be an array`)
   }
-  const data: unknown[] = value
+  const data: JsonValue[] = value
 
   const walls: number[][][] = []
 
@@ -173,7 +212,7 @@ export function parseWalls(value: unknown, contextLabel: string): number[][][] {
 
     const parsedPolyline: number[][] = []
     for (let pointIndex = 0; pointIndex < polyline.length; pointIndex += 1) {
-      const pt = (polyline as unknown[])[pointIndex]
+      const pt = polyline[pointIndex]
       if (!Array.isArray(pt) || pt.length !== 2) {
         throw new Error(`${label}[${pointIndex}] must be [lat, lng]`)
       }
@@ -200,11 +239,11 @@ export function parseWalls(value: unknown, contextLabel: string): number[][][] {
   return walls
 }
 
-export function parseZones(value: unknown, floorId: string, contextLabel: string): TrafficZone[] {
+export function parseZones(value: JsonValue, floorId: string, contextLabel: string): TrafficZone[] {
   if (!Array.isArray(value)) {
     throw new Error(`${contextLabel} must be an array`)
   }
-  const data: unknown[] = value
+  const data: JsonValue[] = value
 
   const zones: TrafficZone[] = []
   const seenUids = new Set<string>()
@@ -243,7 +282,7 @@ export function parseZones(value: unknown, floorId: string, contextLabel: string
     assertCoordinateBounds(maxLat, maxLng, `${label}.bounds.max`)
 
     let intensity: number
-    if (typeof rawZone.intensity === 'number' && Number.isFinite(rawZone.intensity)) {
+    if (isFiniteNumber(rawZone.intensity)) {
       intensity = rawZone.intensity
     } else {
       throw new Error(`${label}.intensity must be a finite number`)
@@ -270,7 +309,7 @@ export async function loadAllFloorsZones(): Promise<TrafficZone[]> {
       FLOORS.AVAILABLE.map(async (floor) => {
         const res = await fetch(getDataUrl(floor.id, 'zones'))
         if (!res.ok) return []
-        const rawZones: unknown = await res.json()
+        const rawZones = await readJson(res)
         const floorZones = parseZones(rawZones, floor.id, `floor${floor.id}/zones.json`)
         graphLogger.log(`Loaded ${floorZones.length} traffic zones from Floor ${floor.id}`)
         return floorZones
@@ -302,8 +341,8 @@ export async function loadAllFloorsNavigationData(signal?: AbortSignal): Promise
         throw new Error(`Failed to load floor ${floor.id} walls: ${wallsRes.status}`)
       }
 
-      const rawNodes: unknown = await nodesRes.json()
-      const rawWalls: unknown = await wallsRes.json()
+      const rawNodes = await readJson(nodesRes)
+      const rawWalls = await readJson(wallsRes)
       const nodes = parseNodes(rawNodes, floor.id, `floor${floor.id}/nodes.json`)
       const walls = convertWallData(parseWalls(rawWalls, `floor${floor.id}/walls.json`))
       walls.forEach((wall) => {
@@ -312,7 +351,7 @@ export async function loadAllFloorsNavigationData(signal?: AbortSignal): Promise
 
       let zones: TrafficZone[] = []
       if (zonesRes.ok) {
-        const rawZones: unknown = await zonesRes.json()
+        const rawZones = await readJson(zonesRes)
         zones = parseZones(rawZones, floor.id, `floor${floor.id}/zones.json`)
       } else {
         logger.warn(`Failed to load zones for floor ${floor.id}: ${zonesRes.status}`)
@@ -369,12 +408,8 @@ function scheduleNavigationInitialization(requestId: number): void {
     }
   }
 
-  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-    ;(
-      window as Window & {
-        requestIdleCallback: (cb: () => void, options?: { timeout: number }) => number
-      }
-    ).requestIdleCallback(
+  if (hasRequestIdleCallback(window)) {
+    window.requestIdleCallback(
       () => {
         void run()
       },
@@ -448,8 +483,9 @@ export function initMap(callbacks: MapInitCallbacks): void {
   // invalidateSize() on visualViewport resize ensures the map fills the
   // correct area after the keyboard shows or hides (e.g. when the user taps
   // a search input directly above the map).
-  if (typeof window !== 'undefined' && window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
+  const viewport = window.visualViewport
+  if (viewport) {
+    viewport.addEventListener('resize', () => {
       leafletMap.invalidateSize()
     })
   }
@@ -535,8 +571,7 @@ function updateFloorUi(floorId: string): void {
   const floorLabel = document.querySelector('.floor-label')
   if (floorLabel) floorLabel.textContent = t('floor.label', { floor: floorId })
 
-  document.querySelectorAll('.floor-btn').forEach((btn) => {
-    const htmlBtn = btn as HTMLElement
+  document.querySelectorAll<HTMLElement>('.floor-btn').forEach((htmlBtn) => {
     if (htmlBtn.getAttribute('data-floor') === floorId) {
       htmlBtn.classList.add('active')
       htmlBtn.setAttribute('aria-current', 'true')
@@ -657,17 +692,17 @@ export async function loadData(): Promise<void> {
       if (!nodesRes.ok) {
         throw new Error(`Failed to load nodes: ${nodesRes.status} ${nodesRes.statusText}`)
       }
-      const rawNodes: unknown = await nodesRes.json()
+      const rawNodes = await readJson(nodesRes)
       state.collectedNodes = parseNodes(rawNodes, floorId, `floor${floorId}/nodes.json`)
 
       if (!wallsRes.ok) {
         throw new Error(`Failed to load walls: ${wallsRes.status} ${wallsRes.statusText}`)
       }
-      const rawWalls: unknown = await wallsRes.json()
+      const rawWalls = await readJson(wallsRes)
       state.collectedWalls = parseWalls(rawWalls, `floor${floorId}/walls.json`)
 
       if (zonesRes.ok) {
-        const rawZones: unknown = await zonesRes.json()
+        const rawZones = await readJson(zonesRes)
         state.trafficZones = parseZones(rawZones, floorId, `floor${floorId}/zones.json`)
         graphLogger.log(
           `[${requestId}] Loaded ${state.trafficZones.length} zones for floor ${floorId}`
@@ -719,7 +754,7 @@ export async function loadAllNodesAllFloors(): Promise<Node[]> {
       FLOORS.AVAILABLE.map(async (floor) => {
         const res = await fetch(getDataUrl(floor.id, 'nodes'))
         if (!res.ok) return []
-        const rawNodes: unknown = await res.json()
+        const rawNodes = await readJson(res)
         const floorNodes = parseNodes(rawNodes, floor.id, `floor${floor.id}/nodes.json`)
         graphLogger.log(`Loaded ${floorNodes.length} nodes from Floor ${floor.id}`)
         return floorNodes
@@ -746,7 +781,7 @@ export async function loadAllFloorsWalls(): Promise<Wall[]> {
       FLOORS.AVAILABLE.map(async (floor) => {
         const res = await fetch(getDataUrl(floor.id, 'walls'))
         if (!res.ok) return []
-        const rawWalls: unknown = await res.json()
+        const rawWalls = await readJson(res)
         const floorWallsRaw = parseWalls(rawWalls, `floor${floor.id}/walls.json`)
         const floorWalls = convertWallData(floorWallsRaw)
         floorWalls.forEach((wall) => {

@@ -94,9 +94,9 @@ function prioritizeFavorites(results: SearchResult[]): SearchResult[] {
 }
 
 function inputFor(type: SearchType): HTMLInputElement | null {
-  return document.getElementById(
-    type === 'start' ? 'start-input' : 'end-input'
-  ) as HTMLInputElement | null
+  return document.querySelector<HTMLInputElement>(
+    type === 'start' ? '#start-input' : '#end-input'
+  )
 }
 
 function setSelected(type: SearchType, node: Node, label?: string): void {
@@ -399,7 +399,11 @@ export function updateRecentSearchesUI(onRouteRequested: () => void): void {
 }
 
 /** Initialize autocomplete, recent-search rendering, and its disclosure button. */
-export function setupSearchUI(onRouteRequested: () => void): { cleanup: () => void } {
+interface SearchUiController {
+  cleanup: () => void
+}
+
+export function setupSearchUI(onRouteRequested: () => void): SearchUiController {
   const cleanups = [setupInput('start'), setupInput('end')]
   updateRecentSearchesUI(onRouteRequested)
   const toggle = document.getElementById('recent-toggle-btn')

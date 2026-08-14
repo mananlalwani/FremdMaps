@@ -288,7 +288,7 @@ import { pwaInfo } from 'virtual:pwa-info'
       import { applyTranslations, getLocale, initializeI18n, setLocale } from '../utils/i18n'
 
       initializeI18n()
-      const languageSelect = document.getElementById('language-select') as HTMLSelectElement | null
+      const languageSelect = document.querySelector<HTMLSelectElement>('#language-select')
       if (languageSelect) {
         languageSelect.value = getLocale()
         languageSelect.addEventListener('change', () => {
