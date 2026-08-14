@@ -488,9 +488,7 @@ function buildPathTweaks(): HTMLElement {
     void (async () => {
       // SAFETY: developer tools intentionally override this otherwise immutable session-only setting.
       const mutableMapConfig = MAP_CONFIG as { MAX_HALLWAY_DISTANCE: number }
-      mutableMapConfig.MAX_HALLWAY_DISTANCE = Number(
-        distSlider.value
-      )
+      mutableMapConfig.MAX_HALLWAY_DISTANCE = Number(distSlider.value)
       markNavigationDataChanged()
       await _cb.initializeNavigation()
       refreshAll()

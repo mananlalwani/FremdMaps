@@ -94,9 +94,7 @@ function prioritizeFavorites(results: SearchResult[]): SearchResult[] {
 }
 
 function inputFor(type: SearchType): HTMLInputElement | null {
-  return document.querySelector<HTMLInputElement>(
-    type === 'start' ? '#start-input' : '#end-input'
-  )
+  return document.querySelector<HTMLInputElement>(type === 'start' ? '#start-input' : '#end-input')
 }
 
 function setSelected(type: SearchType, node: Node, label?: string): void {

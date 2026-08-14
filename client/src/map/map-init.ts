@@ -33,9 +33,9 @@ async function readJson(response: Response): Promise<JsonValue> {
   return (await response.json()) as JsonValue
 }
 
-function hasRequestIdleCallback(
-  target: Window
-): target is Window & { requestIdleCallback: (cb: () => void, options?: { timeout: number }) => number } {
+function hasRequestIdleCallback(target: Window): target is Window & {
+  requestIdleCallback: (cb: () => void, options?: { timeout: number }) => number
+} {
   return 'requestIdleCallback' in target
 }
 

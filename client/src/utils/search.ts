@@ -15,33 +15,35 @@ import { SEARCH_CONFIG } from '../config/featured'
 import { t } from './i18n'
 import type { Node, SearchResult, RoomCategory } from './types'
 
-const SPANISH_ROOM_ALIASES = new Map(Object.entries({
-  'attendance office': ['oficina de asistencia'],
-  auditorium: ['auditorio'],
-  "boy's locker room": ['vestidor de niños', 'vestuario masculino'],
-  cafeteria: ['cafetería', 'cafeteria', 'comedor'],
-  cashier: ['caja'],
-  'cross fit room': ['sala de crossfit'],
-  'dance room': ['sala de baile'],
-  "girl's locker room": ['vestidor de niñas', 'vestuario femenino'],
-  'gymnastics room': ['sala de gimnasia'],
-  library: ['biblioteca'],
-  'main gym': ['gimnasio principal'],
-  'main office': ['oficina principal'],
-  nurse: ['enfermería', 'enfermeria'],
-  pool: ['piscina'],
-  preschool: ['preescolar'],
-  'south gym': ['gimnasio sur'],
-  'spirit shop': ['tienda escolar'],
-  'student services': ['servicios estudiantiles'],
-  tech: ['tecnología', 'tecnologia'],
-  'test makeup': ['exámenes recuperativos', 'examenes recuperativos'],
-  trainer: ['entrenador'],
-  tutoring: ['tutoría', 'tutoria'],
-  'weight room': ['sala de pesas'],
-  wrestling: ['lucha'],
-  bathroom: ['baño', 'bano', 'baños', 'banos', 'sanitario', 'sanitarios'],
-} satisfies Record<string, string[]>))
+const SPANISH_ROOM_ALIASES = new Map(
+  Object.entries({
+    'attendance office': ['oficina de asistencia'],
+    auditorium: ['auditorio'],
+    "boy's locker room": ['vestidor de niños', 'vestuario masculino'],
+    cafeteria: ['cafetería', 'cafeteria', 'comedor'],
+    cashier: ['caja'],
+    'cross fit room': ['sala de crossfit'],
+    'dance room': ['sala de baile'],
+    "girl's locker room": ['vestidor de niñas', 'vestuario femenino'],
+    'gymnastics room': ['sala de gimnasia'],
+    library: ['biblioteca'],
+    'main gym': ['gimnasio principal'],
+    'main office': ['oficina principal'],
+    nurse: ['enfermería', 'enfermeria'],
+    pool: ['piscina'],
+    preschool: ['preescolar'],
+    'south gym': ['gimnasio sur'],
+    'spirit shop': ['tienda escolar'],
+    'student services': ['servicios estudiantiles'],
+    tech: ['tecnología', 'tecnologia'],
+    'test makeup': ['exámenes recuperativos', 'examenes recuperativos'],
+    trainer: ['entrenador'],
+    tutoring: ['tutoría', 'tutoria'],
+    'weight room': ['sala de pesas'],
+    wrestling: ['lucha'],
+    bathroom: ['baño', 'bano', 'baños', 'banos', 'sanitario', 'sanitarios'],
+  } satisfies Record<string, string[]>)
+)
 
 /** Normalize user search terms without changing the official displayed room labels. */
 function normalizeSearchTerm(value: string): string {

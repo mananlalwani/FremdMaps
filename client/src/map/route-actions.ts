@@ -87,11 +87,20 @@ export function setupRouteActions(options: RouteActionOptions): RouteActions {
     if (!startInput || !endInput) return
     const startText = startInput.value.trim()
     const endText = endInput.value.trim()
-    if (!startText || !endText) return options.showStatus(dependencies.translate('route.missingLocations'), 'warning')
+    if (!startText || !endText)
+      return options.showStatus(dependencies.translate('route.missingLocations'), 'warning')
     const graph = options.getGraph()
     if (!graph) return options.showStatus(dependencies.translate('route.mapLoading'), 'warning')
-    const start = resolveRoom(startText, state.selectedStartNode?.uid ?? null, dependencies.searchNodes)
-    const endCandidates = resolveRoomCandidates(endText, state.selectedEndNode?.uid ?? null, dependencies.searchNodes)
+    const start = resolveRoom(
+      startText,
+      state.selectedStartNode?.uid ?? null,
+      dependencies.searchNodes
+    )
+    const endCandidates = resolveRoomCandidates(
+      endText,
+      state.selectedEndNode?.uid ?? null,
+      dependencies.searchNodes
+    )
     if (!start || endCandidates.length === 0)
       return options.showStatus(dependencies.translate('route.locationsNotFound'), 'error')
 
@@ -116,7 +125,8 @@ export function setupRouteActions(options: RouteActionOptions): RouteActions {
     const otherFloorCandidates = endCandidates.filter((end) => end.floor !== start.floor)
     const bestResult =
       findShortestReachable(sameFloorCandidates) ?? findShortestReachable(otherFloorCandidates)
-    if (bestResult === null) return options.showStatus(dependencies.translate('route.noPath'), 'error')
+    if (bestResult === null)
+      return options.showStatus(dependencies.translate('route.noPath'), 'error')
     dependencies.addRecentSearch(startText, endText)
     options.refreshRecent()
     dependencies.displayRoute(bestResult.path, bestResult.distance)
@@ -126,15 +136,25 @@ export function setupRouteActions(options: RouteActionOptions): RouteActions {
   const findBathroom = (): void => {
     const startInput = document.querySelector<HTMLInputElement>('#start-input')
     const startText = startInput?.value.trim() ?? ''
-    if (!startText) return options.showStatus(dependencies.translate('route.missingStart'), 'warning')
+    if (!startText)
+      return options.showStatus(dependencies.translate('route.missingStart'), 'warning')
     const graph = options.getGraph()
     if (!graph) return options.showStatus(dependencies.translate('route.mapLoading'), 'warning')
-    const start = resolveRoom(startText, state.selectedStartNode?.uid ?? null, dependencies.searchNodes)
-    if (!start) return options.showStatus(dependencies.translate('route.roomNotFound', { room: startText }), 'error')
+    const start = resolveRoom(
+      startText,
+      state.selectedStartNode?.uid ?? null,
+      dependencies.searchNodes
+    )
+    if (!start)
+      return options.showStatus(
+        dependencies.translate('route.roomNotFound', { room: startText }),
+        'error'
+      )
     const bathroom = dependencies.findNearestBathroom(start, state.allNodesAllFloors, graph)
     if (!bathroom) return options.showStatus(dependencies.translate('route.noBathrooms'), 'error')
     const result = dependencies.findPath(start.uid, bathroom.uid, state.allNodesAllFloors, graph)
-    if (!result.found) return options.showStatus(dependencies.translate('route.noBathroomPath'), 'error')
+    if (!result.found)
+      return options.showStatus(dependencies.translate('route.noBathroomPath'), 'error')
     dependencies.displayRoute(result.path, result.distance)
     options.collapsePanel()
   }
