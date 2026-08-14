@@ -43,6 +43,6 @@
   "devDependencies": {
     "@oxlint/plugins": "1.78.0",
     "oxlint": "1.78.0",
-    "wrangler": "^4.113.0"
+    "wrangler": "^4.121.0"
   }
 }
