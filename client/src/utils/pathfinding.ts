@@ -205,11 +205,9 @@ export function findPath(
 
   const cameFrom = new Map<string, string>()
   const gScore = new Map<string, number>()
-  const fScore = new Map<string, number>()
 
   // Start node has g-score of 0
   gScore.set(startUid, 0)
-  fScore.set(startUid, heuristic(startUid))
 
   // A* main loop
   // No permanently-closed visited set: the heuristic is inconsistent across
@@ -278,7 +276,6 @@ export function findPath(
         cameFrom.set(neighborUid, current)
         gScore.set(neighborUid, tentativeGScore)
         const nextFScore = tentativeGScore + heuristic(neighborUid)
-        fScore.set(neighborUid, nextFScore)
         openSet.enqueue(neighborUid, nextFScore)
       }
     }

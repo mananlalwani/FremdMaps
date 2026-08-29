@@ -5,9 +5,8 @@
  * filtering, and a recency-boost ranking pass.  A module-level Fuse.js index
  * cache avoids rebuilding the index on every keystroke.
  *
- * NOTE: When a `categoryFilter` is passed to `searchNodes`, the cache is
- * bypassed and a fresh index is built for the filtered node subset — category-
- * filtered searches are therefore slightly slower than unfiltered ones.
+ * Category-filtered indexes are cached alongside the full index and reused
+ * while the caller retains the same nodes array reference.
  */
 
 import Fuse from 'fuse.js'

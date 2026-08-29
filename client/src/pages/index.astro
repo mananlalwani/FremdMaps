@@ -18,7 +18,7 @@ import { pwaInfo } from 'virtual:pwa-info'
     {pwaInfo && <Fragment set:html={pwaInfo.webManifest.linkTag} />}
 
     <!-- Preload default floor plan image -->
-    <link rel="preload" as="image" href="/floor2.png" type="image/png" fetchpriority="high" />
+    <link rel="preload" as="image" href="/floor2.webp" type="image/webp" fetchpriority="high" />
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
