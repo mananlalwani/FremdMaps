@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "pnpm --filter client dev",
     "validate:data": "node scripts/validate-data.mjs",
+    "optimize:walls": "node scripts/optimize-walls.mjs",
     "build": "pnpm run validate:data && pnpm --filter client build",
     "format:check": "pnpm --filter client exec prettier --check src ../package.json ../.github/workflows/ci.yml '../docs/**/*.md'",
     "test": "pnpm --filter client test",

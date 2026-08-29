@@ -101,38 +101,35 @@ class PriorityQueue<T> {
 
   // Helper: Move element up to maintain heap property
   private bubbleUp(index: number): void {
-    if (index === 0) return
-
-    const parentIndex = Math.floor((index - 1) / 2)
-    if (this.heap[index].priority < this.heap[parentIndex].priority) {
+    while (index > 0) {
+      const parentIndex = Math.floor((index - 1) / 2)
+      if (this.heap[index].priority >= this.heap[parentIndex].priority) break
       ;[this.heap[index], this.heap[parentIndex]] = [this.heap[parentIndex], this.heap[index]]
-      this.bubbleUp(parentIndex)
+      index = parentIndex
     }
   }
 
   // Helper: Move element down to maintain heap property
   private bubbleDown(index: number): void {
-    const leftChild = 2 * index + 1
-    const rightChild = 2 * index + 2
-    let smallest = index
+    while (2 * index + 1 < this.heap.length) {
+      const leftChild = 2 * index + 1
+      const rightChild = 2 * index + 2
+      let smallest = index
 
-    if (
-      leftChild < this.heap.length &&
-      this.heap[leftChild].priority < this.heap[smallest].priority
-    ) {
-      smallest = leftChild
-    }
+      if (this.heap[leftChild].priority < this.heap[smallest].priority) {
+        smallest = leftChild
+      }
 
-    if (
-      rightChild < this.heap.length &&
-      this.heap[rightChild].priority < this.heap[smallest].priority
-    ) {
-      smallest = rightChild
-    }
+      if (
+        rightChild < this.heap.length &&
+        this.heap[rightChild].priority < this.heap[smallest].priority
+      ) {
+        smallest = rightChild
+      }
 
-    if (smallest !== index) {
+      if (smallest === index) break
       ;[this.heap[index], this.heap[smallest]] = [this.heap[smallest], this.heap[index]]
-      this.bubbleDown(smallest)
+      index = smallest
     }
   }
 }
@@ -210,12 +207,6 @@ export function findPath(
   const gScore = new Map<string, number>()
   const fScore = new Map<string, number>()
 
-  // Initialize all scores to infinity
-  nodes.forEach((n) => {
-    gScore.set(n.uid, Infinity)
-    fScore.set(n.uid, Infinity)
-  })
-
   // Start node has g-score of 0
   gScore.set(startUid, 0)
   fScore.set(startUid, heuristic(startUid))
@@ -235,9 +226,10 @@ export function findPath(
 
       while (uid) {
         const n = nodeMap.get(uid)
-        if (n) path.unshift(n)
+        if (n) path.push(n)
         uid = cameFrom.get(uid)
       }
+      path.reverse()
 
       const totalDistance = gScore.get(goalUid) ?? 0
 
@@ -277,14 +269,17 @@ export function findPath(
       }
 
       // Calculate tentative g-score
-      const tentativeGScore = gScore.get(current)! + edge.cost
+      const currentGScore = gScore.get(current) ?? Infinity
+      const tentativeGScore = currentGScore + edge.cost
+      const neighborGScore = gScore.get(neighborUid) ?? Infinity
 
       // Update if this path is better
-      if (tentativeGScore < gScore.get(neighborUid)!) {
+      if (tentativeGScore < neighborGScore) {
         cameFrom.set(neighborUid, current)
         gScore.set(neighborUid, tentativeGScore)
-        fScore.set(neighborUid, tentativeGScore + heuristic(neighborUid))
-        openSet.enqueue(neighborUid, fScore.get(neighborUid)!)
+        const nextFScore = tentativeGScore + heuristic(neighborUid)
+        fScore.set(neighborUid, nextFScore)
+        openSet.enqueue(neighborUid, nextFScore)
       }
     }
   }
@@ -344,10 +339,11 @@ export function findNearestBathroom(
     return nearest
   }
 
-  // Single Dijkstra pass from startNode — visits each node at most once.
-  // Time complexity: O((V + E) log V)
+  // Single Dijkstra pass from startNode with early exit upon reaching nearest bathroom.
+  // Time complexity: O((V + E) log V), stops immediately on closest match.
   const dist = new Map<string, number>()
   const open = new PriorityQueue<string>()
+  const bathroomMap = new Map(bathrooms.map((b) => [b.uid, b]))
 
   dist.set(startNode.uid, 0)
   open.enqueue(startNode.uid, 0)
@@ -358,6 +354,16 @@ export function findNearestBathroom(
     const current = open.dequeue()!
     if (visited.has(current)) continue
     visited.add(current)
+
+    // Early termination: Dijkstra guarantees the first dequeued target is optimal
+    const matchedBathroom = bathroomMap.get(current)
+    if (matchedBathroom) {
+      const matchDist = dist.get(current) ?? 0
+      routeLogger.log(
+        `Found nearest bathroom: ${matchedBathroom.rooms[0]} at ${Math.round(matchDist)} units away (actual path${matchedBathroom.floor !== startNode.floor ? ', cross-floor' : ''})`
+      )
+      return matchedBathroom
+    }
 
     const currentDist = dist.get(current) ?? Infinity
     const neighbors = graph.get(current) ?? []
@@ -371,25 +377,6 @@ export function findNearestBathroom(
     }
   }
 
-  // Pick the reachable bathroom with minimum path distance
-  let nearest: Node | undefined
-  let minDistance = Infinity
-
-  for (const bathroom of bathrooms) {
-    const d = dist.get(bathroom.uid)
-    if (d !== undefined && d < minDistance) {
-      minDistance = d
-      nearest = bathroom
-    }
-  }
-
-  if (nearest) {
-    routeLogger.log(
-      `Found nearest bathroom: ${nearest.rooms[0]} at ${Math.round(minDistance)} units away (actual path${nearest.floor !== startNode.floor ? ', cross-floor' : ''})`
-    )
-  } else {
-    routeLogger.warn('No reachable bathrooms found')
-  }
-
-  return nearest
+  routeLogger.warn('No reachable bathrooms found')
+  return undefined
 }

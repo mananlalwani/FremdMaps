@@ -788,15 +788,13 @@ function confirmDeleteZone(zone: TrafficZone): void {
 `
   const confirmBtn = panel.querySelector('#dev-delete-zone-confirm')
   confirmBtn?.addEventListener('click', () => {
-    state.allTrafficZones = state.allTrafficZones.filter((z) => z.uid !== zone.uid)
-    state.trafficZones = state.trafficZones.filter((z) => z.uid !== zone.uid)
-    const rectIdx = state.trafficZoneRects.findIndex(
-      (_, i) => state.trafficZones[i]?.uid === zone.uid
-    )
-    if (rectIdx !== -1 && state.map) {
+    const rectIdx = state.trafficZones.findIndex((z) => z.uid === zone.uid)
+    if (rectIdx !== -1 && state.map && state.trafficZoneRects[rectIdx]) {
       state.map.removeLayer(state.trafficZoneRects[rectIdx])
       state.trafficZoneRects.splice(rectIdx, 1)
     }
+    state.allTrafficZones = state.allTrafficZones.filter((z) => z.uid !== zone.uid)
+    state.trafficZones = state.trafficZones.filter((z) => z.uid !== zone.uid)
     markNavigationDataChanged()
     void _cb.initializeNavigation()
     clearHighlight()
@@ -1183,6 +1181,8 @@ function confirmDeleteNode(node: Node): void {
 `
   const confirmBtn = panel.querySelector('#dev-delete-confirm')
   confirmBtn?.addEventListener('click', () => {
+    if (state.selectedStartNode?.uid === node.uid) state.selectedStartNode = null
+    if (state.selectedEndNode?.uid === node.uid) state.selectedEndNode = null
     state.collectedNodes = state.collectedNodes.filter((n) => n.uid !== node.uid)
     state.allNodesAllFloors = state.allNodesAllFloors.filter((n) => n.uid !== node.uid)
     markNavigationDataChanged()

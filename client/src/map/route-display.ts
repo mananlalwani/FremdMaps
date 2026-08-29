@@ -402,6 +402,8 @@ export function generateDirections(path: Node[], activeFloor: string): void {
 
   list.textContent = '' // clear existing items safely
 
+  const fragment = document.createDocumentFragment()
+
   for (const step of steps) {
     const stepFloorIndex = floorOrder.indexOf(step.floor)
     const isActive =
@@ -443,6 +445,8 @@ export function generateDirections(path: Node[], activeFloor: string): void {
       li.appendChild(floorBadge)
     }
 
-    list.appendChild(li)
+    fragment.appendChild(li)
   }
+
+  list.appendChild(fragment)
 }

@@ -139,8 +139,8 @@ export function createDevOverlayControls(routeControls: GraphControls): DevOverl
       graphLayerGroup.addLayer(
         L.polyline(edges, {
           color: '#22d3ee',
-          weight: 1,
-          opacity: 0.38,
+          weight: 3,
+          opacity: 0.7,
           interactive: false,
         })
       )
@@ -177,13 +177,22 @@ export function createDevOverlayControls(routeControls: GraphControls): DevOverl
       if (enabled) renderGraph()
     })
   )
-  control.appendChild(
-    toggle('Route', state.currentRoute !== null, (enabled) => {
-      if (enabled && state.currentRouteFullPath.length > 0)
-        routeControls.redrawRouteForCurrentFloor()
-      else routeControls.clearRoute()
-    })
-  )
+  const finderToggle = toggle('Finder (H)', true, (enabled) => {
+    document.body.classList.toggle('dev-hide-finder', !enabled)
+  })
+  control.appendChild(finderToggle)
+
+  const handleKeyDown = (e: KeyboardEvent): void => {
+    const targetTag = e.target instanceof HTMLElement ? e.target.tagName : ''
+    if ((e.key === 'h' || e.key === 'H') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(targetTag)) {
+      const checkbox = finderToggle.querySelector<HTMLInputElement>('input')
+      if (checkbox) {
+        checkbox.checked = !checkbox.checked
+        document.body.classList.toggle('dev-hide-finder', !checkbox.checked)
+      }
+    }
+  }
+  window.addEventListener('keydown', handleKeyDown)
 
   return {
     element: control,
@@ -194,6 +203,8 @@ export function createDevOverlayControls(routeControls: GraphControls): DevOverl
       if (graphVisible) renderGraph()
     },
     dispose(): void {
+      window.removeEventListener('keydown', handleKeyDown)
+      document.body.classList.remove('dev-hide-finder')
       zoneLayerGroup = removeLayers(zoneLayerGroup)
       wallLayerGroup = removeLayers(wallLayerGroup)
       nodeLayerGroup = removeLayers(nodeLayerGroup)

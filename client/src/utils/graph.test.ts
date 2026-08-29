@@ -197,6 +197,16 @@ describe('buildVisibilityGraph', () => {
     const graph = buildVisibilityGraph([A, B], [wall], 800)
     expect(graph.get('A')!.some((e) => e.to === 'B')).toBe(true)
   })
+
+  it('uses the assigned node floor for mixed assigned and unassigned pairs', () => {
+    const unassigned = makeNode('unassigned', 0, 0)
+    const floorOne = makeNode('floor-one', 0, 200, { floor: '1' })
+    const floorTwoWall = makeWall(-10, 100, 10, 100, '2')
+
+    const graph = buildVisibilityGraph([unassigned, floorOne], [floorTwoWall], 800)
+
+    expect(graph.get('unassigned')!.some((edge) => edge.to === 'floor-one')).toBe(true)
+  })
 })
 
 // ── Stairway edge cases ──────────────────────────────────────────────────────

@@ -64,7 +64,7 @@ export function segmentsIntersect(p1: Point, p2: Point, w1: Point, w2: Point): b
  * @param walls Array of wall segments
  * @returns true if no walls block the line of sight
  */
-export function hasLineOfSight(p1: Point, p2: Point, walls: Wall[]): boolean {
+export function hasLineOfSight(p1: Point, p2: Point, walls: readonly Wall[]): boolean {
   for (const wall of walls) {
     if (segmentsIntersect(p1, p2, wall.start, wall.end)) {
       return false
@@ -240,7 +240,7 @@ function simplifyRun(
     }
   }
 
-  const hasSafeShortcut = hasLineOfSight(path[startIndex], path[endIndex], [...walls])
+  const hasSafeShortcut = hasLineOfSight(path[startIndex], path[endIndex], walls)
   if (maxDistance <= epsilon && hasSafeShortcut) {
     return [path[startIndex], path[endIndex]]
   }

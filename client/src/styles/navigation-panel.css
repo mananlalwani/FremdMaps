@@ -29,6 +29,16 @@
   will-change: transform;
 }
 
+body.dev-hide-finder #nav-panel {
+  display: none !important;
+}
+
+@media (min-width: 768px) {
+  body.dev-hide-finder #floor-switcher {
+    left: 20px !important;
+  }
+}
+
 #nav-panel.panel-expanded {
   max-height: 85dvh;
 }

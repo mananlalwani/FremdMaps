@@ -36,22 +36,30 @@ interface WallBBox extends BBox {
  * number of walls checked by hasLineOfSight from O(W) to O(log W + k).
  */
 function buildWallIndices(walls: Wall[]): Map<string, RBush<WallBBox>> {
-  const indices = new Map<string, RBush<WallBBox>>()
+  const itemsByFloor = new Map<string, WallBBox[]>()
 
   for (const wall of walls) {
     const floor = wall.floor ?? '__none__'
-    if (!indices.has(floor)) {
-      indices.set(floor, new RBush<WallBBox>())
+    let list = itemsByFloor.get(floor)
+    if (!list) {
+      list = []
+      itemsByFloor.set(floor, list)
     }
 
-    const item: WallBBox = {
+    list.push({
       minX: Math.min(wall.start.lng, wall.end.lng),
       minY: Math.min(wall.start.lat, wall.end.lat),
       maxX: Math.max(wall.start.lng, wall.end.lng),
       maxY: Math.max(wall.start.lat, wall.end.lat),
       wall,
-    }
-    indices.get(floor)!.insert(item)
+    })
+  }
+
+  const indices = new Map<string, RBush<WallBBox>>()
+  for (const [floor, items] of itemsByFloor) {
+    const index = new RBush<WallBBox>()
+    index.load(items)
+    indices.set(floor, index)
   }
 
   return indices
@@ -158,76 +166,90 @@ export function buildVisibilityGraph(
 
   // Build per-floor spatial indices for fast candidate wall lookup
   const wallIndices = buildWallIndices(walls)
-  // Fallback index containing all walls (for nodes without floor info)
-  const allWallsIndex = new RBush<WallBBox>()
-  for (const wall of walls) {
-    allWallsIndex.insert({
-      minX: Math.min(wall.start.lng, wall.end.lng),
-      minY: Math.min(wall.start.lat, wall.end.lat),
-      maxX: Math.max(wall.start.lng, wall.end.lng),
-      maxY: Math.max(wall.start.lat, wall.end.lat),
-      wall,
-    })
-  }
 
   graphLogger.log(
     `Walls indexed by floor:`,
     Array.from(wallIndices.entries()).map(([f, idx]) => `Floor ${f}: ${idx.all().length} walls`)
   )
 
-  // Check each pair of nodes
+  // Partition nodes by floor for 2x faster candidate pairing
+  const nodesByFloor = new Map<string, Node[]>()
+  const unassignedNodes: Node[] = []
+
+  for (const node of nodes) {
+    if (node.floor) {
+      let floorList = nodesByFloor.get(node.floor)
+      if (!floorList) {
+        floorList = []
+        nodesByFloor.set(node.floor, floorList)
+      }
+      floorList.push(node)
+    } else {
+      unassignedNodes.push(node)
+    }
+  }
+
+  // Only floorless-to-floorless pairs need a combined wall index. Runtime-loaded
+  // nodes are floor-tagged, so avoid building and retaining a duplicate index in
+  // the normal path.
+  let allWallsIndex: RBush<WallBBox> | undefined
+  if (unassignedNodes.length > 1) {
+    allWallsIndex = new RBush<WallBBox>()
+    allWallsIndex.load(
+      walls.map((wall) => ({
+        minX: Math.min(wall.start.lng, wall.end.lng),
+        minY: Math.min(wall.start.lat, wall.end.lat),
+        maxX: Math.max(wall.start.lng, wall.end.lng),
+        maxY: Math.max(wall.start.lat, wall.end.lat),
+        wall,
+      }))
+    )
+  }
+
   let edgesAdded = 0
   let edgesSkippedDistance = 0
   let edgesSkippedWalls = 0
 
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
-      const n1 = nodes[i]
-      const n2 = nodes[j]
+  const evaluatePair = (n1: Node, n2: Node, idx: RBush<WallBBox> | undefined): void => {
+    const dist = distance(n1, n2)
+    if (dist > maxDistance) {
+      edgesSkippedDistance++
+      return
+    }
 
-      const p1 = { lat: n1.lat, lng: n1.lng }
-      const p2 = { lat: n2.lat, lng: n2.lng }
+    const candidateWalls = idx ? queryCandidateWalls(n1, n2, idx) : []
+    if (hasLineOfSight(n1, n2, candidateWalls)) {
+      const alignedCost = applyAxisAlignmentPreference(dist, n1, n2)
+      const cost = applyZoneCost(alignedCost, n1, n2, zones)
+      graph.get(n1.uid)!.push({ to: n2.uid, cost })
+      graph.get(n2.uid)!.push({ to: n1.uid, cost })
+      edgesAdded++
+    } else {
+      edgesSkippedWalls++
+    }
+  }
 
-      const dist = distance(p1, p2)
-
-      // Skip if too far apart (prevents long shortcuts)
-      if (dist > maxDistance) {
-        edgesSkippedDistance++
-        continue
+  // Check same-floor pairs
+  for (const [floor, floorNodes] of nodesByFloor) {
+    const idx = wallIndices.get(floor)
+    for (let i = 0; i < floorNodes.length; i++) {
+      for (let j = i + 1; j < floorNodes.length; j++) {
+        evaluatePair(floorNodes[i], floorNodes[j], idx)
       }
+    }
+  }
 
-      // Resolve the spatial index and query candidate walls for this segment
-      let candidateWalls: Wall[]
-
-      if (n1.floor && n2.floor) {
-        if (n1.floor === n2.floor) {
-          const idx = wallIndices.get(n1.floor)
-          candidateWalls = idx ? queryCandidateWalls(p1, p2, idx) : []
-        } else {
-          // Different floors — stairways handle cross-floor connections
-          edgesSkippedDistance++
-          continue
+  // Fallback for unassigned floor nodes (if any)
+  if (unassignedNodes.length > 0) {
+    for (let i = 0; i < unassignedNodes.length; i++) {
+      const n1 = unassignedNodes[i]
+      for (let j = i + 1; j < unassignedNodes.length; j++) {
+        evaluatePair(n1, unassignedNodes[j], allWallsIndex)
+      }
+      for (const node of nodes) {
+        if (node.floor) {
+          evaluatePair(n1, node, wallIndices.get(node.floor))
         }
-      } else if (n1.floor) {
-        const idx = wallIndices.get(n1.floor)
-        candidateWalls = idx ? queryCandidateWalls(p1, p2, idx) : []
-      } else if (n2.floor) {
-        const idx = wallIndices.get(n2.floor)
-        candidateWalls = idx ? queryCandidateWalls(p1, p2, idx) : []
-      } else {
-        // No floor info — query the all-walls index
-        candidateWalls = queryCandidateWalls(p1, p2, allWallsIndex)
-      }
-
-      // Check if there's a clear line of sight (only against candidate walls)
-      if (hasLineOfSight(p1, p2, candidateWalls)) {
-        const alignedCost = applyAxisAlignmentPreference(dist, n1, n2)
-        const cost = applyZoneCost(alignedCost, n1, n2, zones)
-        graph.get(n1.uid)!.push({ to: n2.uid, cost })
-        graph.get(n2.uid)!.push({ to: n1.uid, cost })
-        edgesAdded++
-      } else {
-        edgesSkippedWalls++
       }
     }
   }

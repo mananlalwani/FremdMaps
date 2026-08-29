@@ -211,6 +211,7 @@ export function getCategoryIcon(category: RoomCategory): string {
 let searchIndexCache: {
   nodes: Node[]
   fuse: Fuse<Node>
+  categoryIndices: Map<string, Fuse<Node>>
 } | null = null
 
 /**
@@ -259,18 +260,32 @@ export function createSearchIndex(nodes: Node[]): Fuse<Node> {
  *
  * @param nodes Node array — must be the same reference across calls to reuse
  *   the cache.
+ * @param categoryFilter Optional category filter list.
  */
-function getCachedSearchIndex(nodes: Node[]): Fuse<Node> {
-  // Check if cache exists and nodes haven't changed
-  if (searchIndexCache?.nodes === nodes) {
+function getCachedSearchIndex(nodes: Node[], categoryFilter?: RoomCategory[]): Fuse<Node> {
+  if (searchIndexCache?.nodes !== nodes) {
+    searchIndexCache = {
+      nodes,
+      fuse: createSearchIndex(nodes),
+      categoryIndices: new Map(),
+    }
+  }
+
+  if (!categoryFilter || categoryFilter.length === 0) {
     return searchIndexCache.fuse
   }
 
-  // Create new index and cache it
-  const fuse = createSearchIndex(nodes)
-  searchIndexCache = { nodes, fuse }
+  const categoryKey = categoryFilter.slice().sort().join(',')
+  let categoryFuse = searchIndexCache.categoryIndices.get(categoryKey)
+  if (!categoryFuse) {
+    const searchableNodes = nodes
+      .filter((n) => n.type !== 'waypoint' && !n.rooms.includes('waypoint'))
+      .filter((n) => categoryFilter.includes(inferCategory(n)))
+    categoryFuse = createSearchIndex(searchableNodes)
+    searchIndexCache.categoryIndices.set(categoryKey, categoryFuse)
+  }
 
-  return fuse
+  return categoryFuse
 }
 
 /**
@@ -285,9 +300,6 @@ export function invalidateSearchCache(): void {
  *
  * Results are sorted by Fuse.js relevance score (lower = better match).
  * Waypoints are always excluded from results regardless of `categoryFilter`.
- *
- * When `categoryFilter` is provided a fresh Fuse index is built for the
- * filtered subset — the module-level cache is not used in this path.
  *
  * @param query      Search string; returns `[]` for empty/whitespace input.
  * @param nodes      Candidate node pool.
@@ -321,11 +333,7 @@ export function searchNodes(
   }
 
   // Get cached index (much faster than recreating)
-  // Note: If category filter is used, we still need a new index for filtered nodes
-  const fuse =
-    categoryFilter && categoryFilter.length > 0
-      ? createSearchIndex(searchableNodes)
-      : getCachedSearchIndex(nodes)
+  const fuse = getCachedSearchIndex(nodes, categoryFilter)
 
   // Fuse intentionally ignores one-character matches to avoid noisy results.
   // Room numbers are the exception: students need to be able to enter rooms
