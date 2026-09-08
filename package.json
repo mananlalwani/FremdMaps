@@ -21,31 +21,9 @@
     "deploy": "pnpm run build && wrangler deploy",
     "preview": "pnpm run build && wrangler dev"
   },
-  "pnpm": {
-    "overrides": {
-      "picomatch@<2.3.2": "2.3.2",
-      "picomatch@>=4.0.0 <4.0.4": "4.0.4",
-      "flatted@<3.4.2": "3.4.2",
-      "defu@<6.1.5": "6.1.5",
-      "ws@<8.21.0": "8.21.0",
-      "fast-uri@<3.1.5": "3.1.5",
-      "brace-expansion@>=4.0.0 <5.0.9": "5.0.9",
-      "js-yaml@>=4.0.0 <4.3.1": "4.3.1",
-      "nanoid@<3.3.18": "3.3.18",
-      "sharp@<0.35.0": "0.35.3",
-      "undici@<7.28.0": "7.28.0",
-      "minimatch@<10.2.3": "10.2.3",
-      "@vite-pwa/astro": "1.2.0"
-    },
-    "peerDependencyRules": {
-      "allowedVersions": {
-        "@vite-pwa/astro": "1.2.0",
-        "astro": "^7.0.0"
-      }
-    }
-  },
   "devDependencies": {
     "@oxlint/plugins": "1.78.0",
+    "fast-uri": "3.1.6",
     "oxlint": "1.78.0",
     "wrangler": "^4.121.0"
   }

@@ -129,4 +129,49 @@ describe('route planner', () => {
 
     expect(planner.plan({ text: '101' }, { text: '102' })).toEqual({ status: 'not-ready' })
   })
+
+  it('distinguishes missing places and unreachable routes', async () => {
+    const data = createNavigationData({ fetch: fetchData })
+    const planner = createRoutePlanner(data)
+    planners.push(planner)
+    await data.load('2')
+    await waitUntilReady(planner)
+
+    expect(planner.plan({ text: 'Missing' }, { text: 'Auditorium' })).toEqual({
+      status: 'origin-not-found',
+    })
+    expect(planner.plan({ text: 'Start' }, { text: 'Missing' })).toEqual({
+      status: 'destination-not-found',
+    })
+    expect(planner.plan({ text: 'Start', selectedUid: 'start-1' }, { text: 'Bathroom' })).toEqual({
+      status: 'no-route',
+    })
+  })
+
+  it('plans to the nearest bathroom and exposes destinations', async () => {
+    const data = createNavigationData({ fetch: fetchData })
+    const planner = createRoutePlanner(data)
+    planners.push(planner)
+    await data.load('2')
+    await waitUntilReady(planner)
+
+    const outcome = planner.planToNearestBathroom({ text: 'Start' })
+
+    expect(outcome.status).toBe('ok')
+    if (outcome.status === 'ok') expect(outcome.plan.destination.uid).toBe('bathroom-2')
+    expect(planner.getDestinations()).toHaveLength(5)
+    expect(planner.findExact('Bathroom').map((node) => node.uid)).toEqual(['bathroom-2'])
+  })
+
+  it('recompiles after a valid hallway-distance change', async () => {
+    const data = createNavigationData({ fetch: fetchData })
+    const planner = createRoutePlanner(data)
+    planners.push(planner)
+    await data.load('2')
+    await waitUntilReady(planner)
+
+    await planner.setMaximumHallwayDistance(600)
+
+    expect(planner.getStatus()).toEqual({ state: 'ready', revision: data.getSnapshot()?.revision })
+  })
 })

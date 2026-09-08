@@ -4,21 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  picomatch@<2.3.2: 2.3.2
-  picomatch@>=4.0.0 <4.0.4: 4.0.4
-  flatted@<3.4.2: 3.4.2
-  defu@<6.1.5: 6.1.5
-  ws@<8.21.0: 8.21.0
-  fast-uri@<3.1.5: 3.1.5
-  brace-expansion@>=4.0.0 <5.0.9: 5.0.9
-  js-yaml@>=4.0.0 <4.3.1: 4.3.1
-  nanoid@<3.3.18: 3.3.18
-  sharp@<0.35.0: 0.35.3
-  undici@<7.28.0: 7.28.0
-  minimatch@<10.2.3: 10.2.3
-  '@vite-pwa/astro': 1.2.0
-
 importers:
 
   .:
@@ -26,6 +11,9 @@ importers:
       '@oxlint/plugins':
         specifier: 1.78.0
         version: 1.78.0
+      fast-uri:
+        specifier: 3.1.6
+        version: 3.1.6
       oxlint:
         specifier: 1.78.0
         version: 1.78.0
@@ -76,7 +64,7 @@ importers:
         specifier: ^8.64.0
         version: 8.64.0(eslint@10.8.1)(typescript@5.9.3)
       '@vite-pwa/astro':
-        specifier: 1.2.0
+        specifier: ^1.2.0
         version: 1.2.0(astro@7.1.3(@astrojs/markdown-remark@7.2.1)(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(rollup@4.62.4)(terser@5.50.0)(yaml@2.9.0))(vite-plugin-pwa@1.3.0(vite@8.1.5(esbuild@0.28.1)(terser@5.50.0)(yaml@2.9.0))(workbox-build@7.4.1)(workbox-window@7.4.1))
       '@vitest/coverage-v8':
         specifier: ^4.1.10
@@ -2264,6 +2252,9 @@ packages:
   bail@2.0.2:
     resolution: {integrity: sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw==}
 
+  balanced-match@1.0.2:
+    resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
+
   balanced-match@4.0.4:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
@@ -2281,6 +2272,9 @@ packages:
 
   boolbase@1.0.0:
     resolution: {integrity: sha512-JZOSA7Mo9sNGB8+UjSgzdLtokWAky1zbztM3WRLCbZ70/3cTANmQmOdR7y2g+J0e2WXywy1yS468tY+IruqEww==}
+
+  brace-expansion@2.1.4:
+    resolution: {integrity: sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg==}
 
   brace-expansion@5.0.9:
     resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
@@ -2703,8 +2697,8 @@ packages:
   fast-string-width@3.0.2:
     resolution: {integrity: sha512-gX8LrtNEI5hq8DVUfRQMbr5lpaS4nMIWV+7XEbXk2b8kiQIizgnlr12B4dA3ZEx3308ze0O4Q1R+cHts8kyUJg==}
 
-  fast-uri@3.1.5:
-    resolution: {integrity: sha512-gHwA1O9LDIcKunMKhObS/HimwtehO1nPUECKAu5TpKgaO19fcWEl4bliWe1jWxVFvIXztJjjQ4L8XQ1EU9f7Jw==}
+  fast-uri@3.1.6:
+    resolution: {integrity: sha512-7Ical1vFEMr0onbVzEDIreM22I4khW+fzyQPwvAFWBp1iwdshSZRsL4jjRvPG9JP1uiqMHRto+YU6R2/CzDz5Q==}
 
   fast-wrap-ansi@0.2.2:
     resolution: {integrity: sha512-7F2Fl+TjRSenLqlU3UjSH0iyqopqoZIu7eZVpEirP2g1GtWa2G/ecEmBdgz31+Mxr+ELclgg6sokpSFIQiZ02Q==}
@@ -2716,7 +2710,7 @@ packages:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
     engines: {node: '>=12.0.0'}
     peerDependencies:
-      picomatch: 4.0.4
+      picomatch: ^3 || ^4
     peerDependenciesMeta:
       picomatch:
         optional: true
@@ -3437,6 +3431,10 @@ packages:
   minimatch@10.2.6:
     resolution: {integrity: sha512-vpLQEs+VLCr1nU0BXS07maYoFwlDAH0gngQuuttxIwutDFEMHq2blX+8vpgxDdK3J1PwjCJiep77OitTZ4Ll1A==}
     engines: {node: 18 || 20 || >=22}
+
+  minimatch@5.1.9:
+    resolution: {integrity: sha512-7o1wEA2RyMP7Iu7GNba9vc0RWWGACJOCZBJX2GJWip0ikV+wcOsgVuY9uE8CPiyQhkGFSlhuSkZPavN7u1c2Fw==}
+    engines: {node: '>=10'}
 
   minipass@7.1.3:
     resolution: {integrity: sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==}
@@ -6657,7 +6655,7 @@ snapshots:
   ajv@8.20.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.5
+      fast-uri: 3.1.6
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
@@ -6858,6 +6856,8 @@ snapshots:
 
   bail@2.0.2: {}
 
+  balanced-match@1.0.2: {}
+
   balanced-match@4.0.4: {}
 
   baseline-browser-mapping@2.11.14: {}
@@ -6869,6 +6869,10 @@ snapshots:
   blake3-wasm@2.1.5: {}
 
   boolbase@1.0.0: {}
+
+  brace-expansion@2.1.4:
+    dependencies:
+      balanced-match: 1.0.2
 
   brace-expansion@5.0.9:
     dependencies:
@@ -7370,7 +7374,7 @@ snapshots:
     dependencies:
       fast-string-truncated-width: 3.0.3
 
-  fast-uri@3.1.5: {}
+  fast-uri@3.1.6: {}
 
   fast-wrap-ansi@0.2.2:
     dependencies:
@@ -7390,7 +7394,7 @@ snapshots:
 
   filelist@1.0.6:
     dependencies:
-      minimatch: 10.2.3
+      minimatch: 5.1.9
 
   fill-range@7.1.1:
     dependencies:
@@ -7510,7 +7514,7 @@ snapshots:
     dependencies:
       foreground-child: 3.3.1
       jackspeak: 4.2.3
-      minimatch: 10.2.3
+      minimatch: 10.2.6
       minipass: 7.1.3
       package-json-from-dist: 1.0.1
       path-scurry: 2.0.2
@@ -8325,6 +8329,10 @@ snapshots:
   minimatch@10.2.6:
     dependencies:
       brace-expansion: 5.0.9
+
+  minimatch@5.1.9:
+    dependencies:
+      brace-expansion: 2.1.4
 
   minipass@7.1.3: {}
 

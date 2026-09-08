@@ -12,9 +12,8 @@ export default defineConfig({
       // developer tooling are exercised by Playwright rather than unit coverage.
       include: [
         'src/utils/**/*.ts',
-        'src/map/map-init.ts',
         'src/map/map-state.ts',
-        'src/map/graph-controller.ts',
+        'src/navigation/**/*.ts',
       ],
       exclude: ['src/**/*.test.ts', 'src/**/*.d.ts'],
       thresholds: {
@@ -22,12 +21,6 @@ export default defineConfig({
         functions: 80,
         branches: 75,
         statements: 80,
-        'src/map/map-init.ts': {
-          lines: 65,
-          functions: 60,
-          branches: 65,
-          statements: 65,
-        },
       },
     },
   },
