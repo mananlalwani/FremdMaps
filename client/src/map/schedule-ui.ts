@@ -1,16 +1,16 @@
 /** Schedule modal controller. Owns schedule rendering, focus management, and room suggestions. */
 
-import { findPath } from '../utils/pathfinding'
 import { t } from '../utils/i18n'
-import { findExactMatch, searchNodes } from '../utils/search'
 import { getSchedule, saveSchedule } from '../utils/storage'
-import type { Graph, Node, ScheduleEntry } from '../utils/types'
 import { state } from './map-state'
-import { displayRoute } from './route-display'
+import type { Node, ScheduleEntry } from '../utils/types'
+import type { ActiveRoute } from '../navigation/activeRoute'
+import type { RoutePlanner } from '../navigation/routePlanner'
 
 type ScheduleView = 'paths' | 'edit'
 
-let getGraph: () => Graph | null = () => null
+let planner: RoutePlanner | null = null
+let activeRoute: ActiveRoute | null = null
 let triggerElement: HTMLElement | null = null
 let focusController: AbortController | null = null
 let setupController: AbortController | null = null
@@ -92,10 +92,10 @@ function selectScheduleSuggestion(input: HTMLInputElement, label: string): void 
 function showScheduleSuggestions(input: HTMLInputElement): void {
   const query = input.value.trim()
   clearScheduleDropdown()
-  if (!query || state.allNodesAllFloors.length === 0) return
+  if (!query || !planner) return
 
   const uniqueSuggestions = new Map<string, { node: Node; label: string }>()
-  for (const result of searchNodes(query, state.allNodesAllFloors, { limit: 8 })) {
+  for (const result of planner.search(query, { limit: 8 })) {
     const label = preferredRoomLabel(result.node, query)
     if (!uniqueSuggestions.has(label.toLowerCase())) {
       uniqueSuggestions.set(label.toLowerCase(), { node: result.node, label })
@@ -332,36 +332,30 @@ function renderPaths(): void {
     rooms.textContent = `${from.room} → ${to.room}`
     item.appendChild(rooms)
 
-    const fromNode = findExactMatch(from.room, state.allNodesAllFloors)
-    const toNode = findExactMatch(to.room, state.allNodesAllFloors)
-    const graph = getGraph()
-    if (!fromNode || !toNode || !graph) {
+    const outcome = planner?.plan({ text: from.room }, { text: to.room }) ?? {
+      status: 'not-ready' as const,
+    }
+    if (outcome.status !== 'ok') {
       item.disabled = true
       const reason = document.createElement('div')
       reason.className = 'schedule-path-notfound'
-      reason.textContent = !graph ? t('schedule.loading') : t('schedule.checkRoom')
+      reason.textContent =
+        outcome.status === 'not-ready'
+          ? t('schedule.loading')
+          : outcome.status === 'origin-not-found' || outcome.status === 'destination-not-found'
+            ? t('schedule.checkRoom')
+            : t('schedule.noRoute')
       item.title = reason.textContent
       item.appendChild(reason)
     } else {
-      const result = findPath(fromNode.uid, toNode.uid, state.allNodesAllFloors, graph, {
-        allowFloorTransitions: fromNode.floor !== toNode.floor,
+      const meta = document.createElement('div')
+      meta.className = 'schedule-path-meta'
+      meta.textContent = t('schedule.viewRoute')
+      item.appendChild(meta)
+      item.addEventListener('click', () => {
+        closeModal()
+        activeRoute?.show(outcome.plan)
       })
-      if (!result.found) {
-        item.disabled = true
-        const reason = document.createElement('div')
-        reason.className = 'schedule-path-notfound'
-        reason.textContent = t('schedule.noRoute')
-        item.appendChild(reason)
-      } else {
-        const meta = document.createElement('div')
-        meta.className = 'schedule-path-meta'
-        meta.textContent = t('schedule.viewRoute')
-        item.appendChild(meta)
-        item.addEventListener('click', () => {
-          closeModal()
-          displayRoute(result.path, result.distance)
-        })
-      }
     }
     list.appendChild(item)
   }
@@ -372,11 +366,15 @@ interface ScheduleModalController {
   cleanup: () => void
 }
 
-export function setupScheduleModal(graphGetter: () => Graph | null): ScheduleModalController {
+export function setupScheduleModal(
+  routePlanner: RoutePlanner,
+  routePresentation: ActiveRoute
+): ScheduleModalController {
   setupController?.abort()
   setupController = new AbortController()
   const signal = setupController.signal
-  getGraph = graphGetter
+  planner = routePlanner
+  activeRoute = routePresentation
   const open = document.getElementById('schedule-btn')
   const close = document.getElementById('schedule-close-btn')
   const editClose = document.getElementById('schedule-edit-close-btn')
@@ -394,6 +392,8 @@ export function setupScheduleModal(graphGetter: () => Graph | null): ScheduleMod
       setupController?.abort()
       setupController = null
       closeModal()
+      planner = null
+      activeRoute = null
     },
   }
 }

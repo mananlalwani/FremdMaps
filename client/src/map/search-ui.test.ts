@@ -4,10 +4,29 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { addFavorite, clearFavorites, getFavorites } from '../utils/storage'
 import { state } from './map-state'
 import { setupSearchUI } from './search-ui'
+import { findExactMatches, searchNodes } from '../utils/search'
+import type { RoutePlanner } from '../navigation/routePlanner'
+
+let testNodes = state.collectedNodes
+
+function testPlanner(): RoutePlanner {
+  return {
+    getStatus: () => ({ state: 'ready', revision: 1 }),
+    subscribe: () => () => undefined,
+    search: (query, options) => searchNodes(query, testNodes, options),
+    findExact: (query) => findExactMatches(query, testNodes),
+    getDestinations: () => testNodes,
+    plan: () => ({ status: 'not-ready' }),
+    planToNearestBathroom: () => ({ status: 'not-ready' }),
+    getDebugView: () => ({ revision: 1, stats: null, connections: [] }),
+    setMaximumHallwayDistance: () => Promise.resolve(),
+    dispose: () => undefined,
+  }
+}
 
 afterEach(() => {
   document.body.innerHTML = ''
-  state.allNodesAllFloors = []
+  testNodes = []
   state.selectedStartNode = null
   state.selectedEndNode = null
   clearFavorites()
@@ -15,15 +34,13 @@ afterEach(() => {
 
 describe('setupSearchUI', () => {
   it('selects the keyboard-active autocomplete option', () => {
-    state.allNodesAllFloors = [
-      { uid: 'room-1', lat: -10, lng: 10, rooms: ['101'], type: 'room', floor: '1' },
-    ]
+    testNodes = [{ uid: 'room-1', lat: -10, lng: 10, rooms: ['101'], type: 'room', floor: '1' }]
     document.body.innerHTML = `
       <div id="start-dropdown-wrapper"><input id="start-input"><div data-dropdown-container><div id="start-results" data-results-list></div></div></div>
       <div id="end-dropdown-wrapper"><input id="end-input"><div data-dropdown-container><div id="end-results" data-results-list></div></div></div>
       <button id="recent-toggle-btn"></button><div id="recent-dropdown"></div><div id="recent-list"></div><button id="clear-recent-btn"></button>
     `
-    setupSearchUI(() => undefined)
+    setupSearchUI(() => undefined, testPlanner())
     const input = document.querySelector<HTMLInputElement>('#start-input')!
     HTMLElement.prototype.scrollIntoView = () => undefined
     input.value = '101'
@@ -36,21 +53,19 @@ describe('setupSearchUI', () => {
   })
 
   it('renders a query entered before autocomplete initialization', () => {
-    state.allNodesAllFloors = [
-      { uid: 'room-1', lat: -10, lng: 10, rooms: ['101'], type: 'room', floor: '1' },
-    ]
+    testNodes = [{ uid: 'room-1', lat: -10, lng: 10, rooms: ['101'], type: 'room', floor: '1' }]
     document.body.innerHTML = `
       <div id="start-dropdown-wrapper"><input id="start-input" value="101"><div data-dropdown-container><div id="start-results" data-results-list></div></div></div>
       <div id="end-dropdown-wrapper"><input id="end-input"><div data-dropdown-container><div id="end-results" data-results-list></div></div></div>
       <button id="recent-toggle-btn"></button><div id="recent-dropdown"></div><div id="recent-list"></div><button id="clear-recent-btn"></button>
     `
-    setupSearchUI(() => undefined)
+    setupSearchUI(() => undefined, testPlanner())
 
     expect(document.querySelectorAll('#start-results [role="option"]')).toHaveLength(1)
   })
 
   it('presents a same-named multi-floor destination once and leaves it shared', () => {
-    state.allNodesAllFloors = [
+    testNodes = [
       { uid: 'auditorium-1', lat: -10, lng: 10, rooms: ['Auditorium'], type: 'room', floor: '1' },
       {
         uid: 'auditorium-2',
@@ -67,7 +82,7 @@ describe('setupSearchUI', () => {
       <div id="end-dropdown-wrapper"><input id="end-input"><div data-dropdown-container><div id="end-results" data-results-list></div></div></div>
       <button id="recent-toggle-btn"></button><div id="recent-dropdown"></div><div id="recent-list"></div><button id="clear-recent-btn"></button>
     `
-    setupSearchUI(() => undefined)
+    setupSearchUI(() => undefined, testPlanner())
     const input = document.querySelector<HTMLInputElement>('#end-input')!
     input.value = 'Auditorium'
     input.dispatchEvent(new FocusEvent('focus'))
@@ -82,7 +97,7 @@ describe('setupSearchUI', () => {
   })
 
   it('lets a destination result be added to favorites', () => {
-    state.allNodesAllFloors = [
+    testNodes = [
       { uid: 'library', lat: -10, lng: 10, rooms: ['Library'], type: 'room', floor: '1' },
     ]
     document.body.innerHTML = `
@@ -90,7 +105,7 @@ describe('setupSearchUI', () => {
       <div id="end-dropdown-wrapper"><input id="end-input"><div data-dropdown-container><div id="end-results" data-results-list></div></div></div>
       <button id="recent-toggle-btn"></button><div id="recent-dropdown"></div><div id="recent-list"></div><button id="clear-recent-btn"></button>
     `
-    setupSearchUI(() => undefined)
+    setupSearchUI(() => undefined, testPlanner())
     const input = document.querySelector<HTMLInputElement>('#end-input')!
     input.value = 'Library'
     input.dispatchEvent(new FocusEvent('focus'))
@@ -104,7 +119,7 @@ describe('setupSearchUI', () => {
   })
 
   it('shows saved rooms first in destination suggestions', () => {
-    state.allNodesAllFloors = [
+    testNodes = [
       { uid: 'library', lat: -10, lng: 10, rooms: ['Library'], type: 'room', floor: '1' },
       { uid: 'cafeteria', lat: -20, lng: 10, rooms: ['Cafeteria'], type: 'room', floor: '1' },
     ]
@@ -114,7 +129,7 @@ describe('setupSearchUI', () => {
       <div id="end-dropdown-wrapper"><input id="end-input"><div data-dropdown-container><div id="end-results" data-results-list></div></div></div>
       <button id="recent-toggle-btn"></button><div id="recent-dropdown"></div><div id="recent-list"></div><button id="clear-recent-btn"></button>
     `
-    setupSearchUI(() => undefined)
+    setupSearchUI(() => undefined, testPlanner())
     const input = document.querySelector<HTMLInputElement>('#end-input')!
     input.dispatchEvent(new FocusEvent('focus'))
 

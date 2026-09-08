@@ -2,12 +2,32 @@
 
 import { afterEach, describe, expect, it } from 'vitest'
 import { setupScheduleModal } from './schedule-ui'
-import { state } from './map-state'
+import type { ActiveRoute } from '../navigation/activeRoute'
+import type { RoutePlanner } from '../navigation/routePlanner'
+
+const room = { uid: 'room-129', rooms: ['129'], lat: 0, lng: 0, floor: '1', type: 'room' as const }
+const planner: RoutePlanner = {
+  getStatus: () => ({ state: 'ready', revision: 1 }),
+  subscribe: () => () => undefined,
+  search: (query) => (query ? [{ node: room, score: 0, matches: ['129'] }] : []),
+  findExact: () => [],
+  getDestinations: () => [room],
+  plan: () => ({ status: 'not-ready' }),
+  planToNearestBathroom: () => ({ status: 'not-ready' }),
+  getDebugView: () => ({ revision: 1, stats: null, connections: [] }),
+  setMaximumHallwayDistance: () => Promise.resolve(),
+  dispose: () => undefined,
+}
+const activeRoute: ActiveRoute = {
+  show: () => undefined,
+  clear: () => undefined,
+  floorChanged: () => undefined,
+  dispose: () => undefined,
+}
 
 afterEach(() => {
   document.body.innerHTML = ''
   localStorage.clear()
-  state.allNodesAllFloors = []
 })
 
 describe('setupScheduleModal', () => {
@@ -21,7 +41,7 @@ describe('setupScheduleModal', () => {
       <button id="schedule-back-btn"></button><button id="schedule-save-btn"></button>
       <div id="schedule-periods-list"></div><div id="schedule-paths-list"></div>
     `
-    setupScheduleModal(() => null)
+    setupScheduleModal(planner, activeRoute)
     const trigger = document.querySelector<HTMLButtonElement>('#schedule-btn')!
     const modal = document.getElementById('schedule-modal')!
     trigger.click()
@@ -45,17 +65,7 @@ describe('setupScheduleModal', () => {
       <button id="schedule-back-btn"></button><button id="schedule-save-btn"></button>
       <div id="schedule-periods-list"></div><div id="schedule-paths-list"></div>
     `
-    state.allNodesAllFloors = [
-      {
-        uid: 'room-129',
-        rooms: ['129'],
-        lat: 0,
-        lng: 0,
-        floor: '1',
-        type: 'room',
-      },
-    ]
-    setupScheduleModal(() => null)
+    setupScheduleModal(planner, activeRoute)
     document.querySelector<HTMLButtonElement>('#schedule-btn')!.click()
     document.querySelector<HTMLButtonElement>('#schedule-edit-btn')!.click()
 

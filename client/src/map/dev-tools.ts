@@ -1,16 +1,15 @@
 import L from 'leaflet'
 import { createDevOverlayControls, type DevOverlayControls } from './dev-tools-overlays'
 import { state } from './map-state'
-import { getGraphStats } from '../utils/graph'
-import type { Graph, Node, TrafficZone, Wall } from '../utils/types'
 import { MAP_CONFIG } from '../utils/constants'
 import { logger } from '../utils/logger'
-import { invalidateSearchCache } from '../utils/search'
-import { invalidatePathCache } from '../utils/pathfinding'
+import type { NavigationData, NavigationEdit } from '../navigation/navigationData'
+import type { RoutePlanner } from '../navigation/routePlanner'
+import type { Node, TrafficZone, Wall } from '../utils/types'
 
 export interface DevToolsCallbacks {
-  getGraph: () => Graph | null
-  initializeNavigation: () => Promise<void>
+  navigationData: NavigationData
+  routePlanner: RoutePlanner
   switchFloor: (floorId: string) => void
   clearRoute: () => void
   redrawRouteForCurrentFloor: () => void
@@ -44,10 +43,18 @@ function getRequiredElement<T extends Element>(parent: ParentNode, selector: str
   return element
 }
 
-function markNavigationDataChanged(): void {
-  state.graphDataRevision += 1
-  invalidateSearchCache()
-  invalidatePathCache()
+async function commitEdit(edit: NavigationEdit): Promise<boolean> {
+  try {
+    await _cb.navigationData.applyEdit(edit)
+    overlayControls?.refresh()
+    refreshAll()
+    return true
+  } catch (error) {
+    logger.error('[Dev] Edit rolled back:', error)
+    overlayControls?.refresh()
+    refreshAll()
+    return false
+  }
 }
 
 const $ = (sel: string): HTMLElement | null => document.querySelector(sel)
@@ -287,19 +294,20 @@ Loaded img: <b>${[...state.loadedFloorImages].join(', ') || '—'}</b>
 function buildGraphStats(): HTMLElement {
   const c = document.createElement('div')
   registerLive(c, () => {
-    const g = _cb.getGraph()
-    if (!g || g.size === 0) return '<span style="color:#f87171">No graph yet</span>'
-    const stats = getGraphStats(g)
+    const diagnostics = _cb.routePlanner.getDebugView()
+    const snapshot = _cb.navigationData.getSnapshot()
+    if (!diagnostics.stats || !snapshot) return '<span style="color:#f87171">No graph yet</span>'
+    const stats = diagnostics.stats
     return [
       `Nodes: <b>${stats.nodes}</b>`,
       `Edges: <b>${stats.edges}</b>`,
       `Avg degree: <b>${stats.avgDegree.toFixed(1)}</b>`,
       `Max degree: <b>${stats.maxDegree}</b>`,
       `Min degree: <b>${stats.minDegree}</b>`,
-      `Collected nodes: <b>${state.collectedNodes.length}</b>`,
-      `All nodes: <b>${state.allNodesAllFloors.length}</b>`,
-      `Walls: <b>${state.wallObjects.length}</b>`,
-      `Traffic zones: <b>${state.allTrafficZones.length}</b>`,
+      `Floor nodes: <b>${_cb.navigationData.getFloor(state.currentFloor).nodes.length}</b>`,
+      `All nodes: <b>${snapshot.nodes.length}</b>`,
+      `Walls: <b>${snapshot.walls.length}</b>`,
+      `Traffic zones: <b>${snapshot.zones.length}</b>`,
     ].join('<br>')
   })
   c.appendChild(row([btn('↻', () => refreshAll())]))
@@ -358,7 +366,9 @@ function exportFloorData(): void {
   if (!floor) return
 
   // Serialize nodes for this floor (strip internal fields)
-  const nodes = state.allNodesAllFloors
+  const snapshot = _cb.navigationData.getSnapshot()
+  if (!snapshot) return
+  const nodes = snapshot.nodes
     .filter((n) => n.floor === floor)
     .map((n) => {
       const serializedNode: SerializedNode = {
@@ -376,7 +386,7 @@ function exportFloorData(): void {
 
   // Convert walls back to raw [[lat,lng],[lat,lng]] format
   const walls: number[][][] = []
-  for (const w of state.wallObjects) {
+  for (const w of snapshot.walls) {
     if (w.floor && w.floor !== floor) continue
     walls.push([
       [w.start.lat, w.start.lng],
@@ -385,7 +395,7 @@ function exportFloorData(): void {
   }
 
   // Serialize zones for this floor
-  const zones = state.allTrafficZones
+  const zones = snapshot.zones
     .filter((z) => z.floor === floor)
     .map((z) => ({
       uid: z.uid,
@@ -415,15 +425,8 @@ function downloadJson(data: DownloadableData, _pathHint: string, filename: strin
 }
 
 async function reloadAll(): Promise<void> {
-  const { loadAllNodesAllFloors, loadAllFloorsWalls, loadAllFloorsZones } =
-    await import('../map/map-init')
   try {
-    state.allNodesAllFloors = await loadAllNodesAllFloors()
-    state.wallObjects = await loadAllFloorsWalls()
-    state.allTrafficZones = await loadAllFloorsZones()
-    state.hasLoadedGlobalNavigationData = true
-    markNavigationDataChanged()
-    await _cb.initializeNavigation()
+    await _cb.navigationData.reload(state.currentFloor)
     logger.log('[Dev] Data reloaded and graph rebuilt')
     refreshAll()
   } catch (err) {
@@ -486,12 +489,14 @@ function buildPathTweaks(): HTMLElement {
 
   const applyBtn = btn('Apply & rebuild', () => {
     void (async () => {
-      // SAFETY: developer tools intentionally override this otherwise immutable session-only setting.
-      const mutableMapConfig = MAP_CONFIG as { MAX_HALLWAY_DISTANCE: number }
-      mutableMapConfig.MAX_HALLWAY_DISTANCE = Number(distSlider.value)
-      markNavigationDataChanged()
-      await _cb.initializeNavigation()
-      refreshAll()
+      try {
+        await _cb.routePlanner.setMaximumHallwayDistance(Number(distSlider.value))
+        refreshAll()
+      } catch (error) {
+        logger.error('[Dev] Graph rebuild failed; restored the previous distance:', error)
+        distSlider.value = String(MAP_CONFIG.MAX_HALLWAY_DISTANCE)
+        updateDistLabel()
+      }
     })()
   })
 
@@ -578,7 +583,9 @@ function buildEditor(): HTMLElement {
 function refreshZoneList(): void {
   const list = $('#dev-zone-list')
   if (!list) return
-  const zones = state.allTrafficZones.filter((z) => z.floor === state.currentFloor)
+  const zones = (_cb.navigationData.getSnapshot()?.zones ?? []).filter(
+    (z) => z.floor === state.currentFloor
+  )
   if (zones.length === 0) {
     list.innerHTML = '<div style="color:#5c5970;font-size:10px">No zones on this floor</div>'
     return
@@ -703,7 +710,9 @@ function handleDeleteZoneClick(latlng: L.LatLng): void {
 // ─── Zone Helpers ─────────────────────────────────────────────────────────
 
 function findNearestZone(latlng: L.LatLng): TrafficZone | null {
-  const floorZones = state.allTrafficZones.filter((z) => z.floor === state.currentFloor)
+  const floorZones = (_cb.navigationData.getSnapshot()?.zones ?? []).filter(
+    (z) => z.floor === state.currentFloor
+  )
   for (const z of floorZones) {
     const { minLat, maxLat, minLng, maxLng } = z.bounds
     if (
@@ -758,13 +767,17 @@ function showEditZoneForm(zone: TrafficZone): void {
   form.addEventListener('submit', (e) => {
     e.preventDefault()
     const fd = new FormData(form)
-    zone.intensity = parseFloat(getFormString(fd, 'intensity') || '2')
-    markNavigationDataChanged()
-    void _cb.initializeNavigation()
-    clearHighlight()
-    logger.log(`[Dev] Updated zone ${zone.uid} congestion=${zone.intensity}`)
-    panel.style.display = 'none'
-    refreshAll()
+    const intensity = parseFloat(getFormString(fd, 'intensity') || '2')
+    void (async () => {
+      const committed = await commitEdit({
+        type: 'update-zone',
+        uid: zone.uid,
+        changes: { intensity },
+      })
+      clearHighlight()
+      if (committed) logger.log(`[Dev] Updated zone ${zone.uid} congestion=${intensity}`)
+      panel.style.display = 'none'
+    })()
   })
   const cancel = panel.querySelector('#dev-edit-zone-cancel')
   cancel?.addEventListener('click', () => {
@@ -788,19 +801,19 @@ function confirmDeleteZone(zone: TrafficZone): void {
 `
   const confirmBtn = panel.querySelector('#dev-delete-zone-confirm')
   confirmBtn?.addEventListener('click', () => {
-    const rectIdx = state.trafficZones.findIndex((z) => z.uid === zone.uid)
-    if (rectIdx !== -1 && state.map && state.trafficZoneRects[rectIdx]) {
-      state.map.removeLayer(state.trafficZoneRects[rectIdx])
-      state.trafficZoneRects.splice(rectIdx, 1)
-    }
-    state.allTrafficZones = state.allTrafficZones.filter((z) => z.uid !== zone.uid)
-    state.trafficZones = state.trafficZones.filter((z) => z.uid !== zone.uid)
-    markNavigationDataChanged()
-    void _cb.initializeNavigation()
-    clearHighlight()
-    logger.log(`[Dev] Deleted zone ${zone.uid}`)
-    panel.style.display = 'none'
-    refreshAll()
+    void (async () => {
+      const committed = await commitEdit({ type: 'remove-zone', uid: zone.uid })
+      if (committed) {
+        const rectIdx = state.trafficZones.findIndex((candidate) => candidate.uid === zone.uid)
+        if (rectIdx !== -1 && state.map && state.trafficZoneRects[rectIdx]) {
+          state.map.removeLayer(state.trafficZoneRects[rectIdx])
+          state.trafficZoneRects.splice(rectIdx, 1)
+        }
+        logger.log(`[Dev] Deleted zone ${zone.uid}`)
+      }
+      clearHighlight()
+      panel.style.display = 'none'
+    })()
   })
   const cancel = panel.querySelector('#dev-delete-zone-cancel')
   cancel?.addEventListener('click', () => {
@@ -821,7 +834,7 @@ function clearHighlight(): void {
 function findNearestWall(latlng: L.LatLng, threshold = 50): Wall | null {
   let nearest: Wall | null = null
   let nearestDistance = Infinity
-  for (const wall of state.wallObjects) {
+  for (const wall of _cb.navigationData.getSnapshot()?.walls ?? []) {
     if (wall.floor !== state.currentFloor) continue
     const distance = pointToSegmentDistance(latlng, wall.start, wall.end)
     if (distance < nearestDistance) {
@@ -870,15 +883,11 @@ function clearWallHighlight(): void {
   }
 }
 
-function applyWallChanges(): void {
-  state.collectedWalls = state.wallObjects
-    .filter((wall) => wall.floor === state.currentFloor)
-    .map((wall) => [
-      [wall.start.lat, wall.start.lng],
-      [wall.end.lat, wall.end.lng],
-    ])
-  markNavigationDataChanged()
-  void _cb.initializeNavigation()
+function refreshAfterWallEdit(): void {
+  state.collectedWalls = _cb.navigationData.getFloor(state.currentFloor).walls.map((wall) => [
+    [wall.start.lat, wall.start.lng],
+    [wall.end.lat, wall.end.lng],
+  ])
   overlayControls?.refresh()
   refreshAll()
 }
@@ -924,13 +933,20 @@ function showAddWallForm(start: Wall['start'], end: Wall['end']): void {
   const form = getRequiredElement<HTMLFormElement>(panel, '#dev-add-wall-form')
   form.addEventListener('submit', (event) => {
     event.preventDefault()
-    state.wallObjects.push({ start, end, floor: state.currentFloor })
-    if (_wallLine && state.map) state.map.removeLayer(_wallLine)
-    _wallLine = null
-    _wallPoint1 = null
-    panel.style.display = 'none'
-    applyWallChanges()
-    logger.log(`[Dev] Added wall from ${start.lat},${start.lng} to ${end.lat},${end.lng}`)
+    void (async () => {
+      const committed = await commitEdit({
+        type: 'add-wall',
+        wall: { start, end, floor: state.currentFloor },
+      })
+      if (_wallLine && state.map) state.map.removeLayer(_wallLine)
+      _wallLine = null
+      _wallPoint1 = null
+      panel.style.display = 'none'
+      refreshAfterWallEdit()
+      if (committed) {
+        logger.log(`[Dev] Added wall from ${start.lat},${start.lng} to ${end.lat},${end.lng}`)
+      }
+    })()
   })
   panel.querySelector('#dev-add-wall-cancel')?.addEventListener('click', () => {
     clearEditorState()
@@ -964,12 +980,21 @@ function showEditWallForm(wall: Wall): void {
     const endLng = Number(values.get('endLng'))
     if (![startLat, startLng, endLat, endLng].every(Number.isFinite)) return
 
-    wall.start = { lat: startLat, lng: startLng }
-    wall.end = { lat: endLat, lng: endLng }
-    panel.style.display = 'none'
-    clearWallHighlight()
-    applyWallChanges()
-    logger.log('[Dev] Updated wall endpoints')
+    void (async () => {
+      const committed = await commitEdit({
+        type: 'update-wall',
+        wall,
+        replacement: {
+          start: { lat: startLat, lng: startLng },
+          end: { lat: endLat, lng: endLng },
+          floor: wall.floor,
+        },
+      })
+      panel.style.display = 'none'
+      clearWallHighlight()
+      refreshAfterWallEdit()
+      if (committed) logger.log('[Dev] Updated wall endpoints')
+    })()
   })
   panel.querySelector('#dev-edit-wall-cancel')?.addEventListener('click', () => {
     clearWallHighlight()
@@ -991,11 +1016,13 @@ function confirmDeleteWall(wall: Wall): void {
 </div>
 `
   panel.querySelector('#dev-delete-wall-confirm')?.addEventListener('click', () => {
-    state.wallObjects = state.wallObjects.filter((candidate) => candidate !== wall)
-    panel.style.display = 'none'
-    clearWallHighlight()
-    applyWallChanges()
-    logger.log('[Dev] Deleted wall')
+    void (async () => {
+      const committed = await commitEdit({ type: 'remove-wall', wall })
+      panel.style.display = 'none'
+      clearWallHighlight()
+      refreshAfterWallEdit()
+      if (committed) logger.log('[Dev] Deleted wall')
+    })()
   })
   panel.querySelector('#dev-delete-wall-cancel')?.addEventListener('click', () => {
     clearWallHighlight()
@@ -1042,7 +1069,7 @@ export function handleMapClick(latlng: L.LatLng): void {
 function findNearestNode(latlng: L.LatLng, threshold = 80): Node | null {
   let best: Node | null = null
   let bestDist = Infinity
-  for (const n of state.collectedNodes) {
+  for (const n of _cb.navigationData.getFloor(state.currentFloor).nodes) {
     const d = Math.sqrt((n.lat - latlng.lat) ** 2 + (n.lng - latlng.lng) ** 2)
     if (d < bestDist) {
       bestDist = d
@@ -1094,13 +1121,13 @@ function showNodeForm(latlng: L.LatLng): void {
       floor: state.currentFloor,
     }
 
-    state.collectedNodes.push(newNode)
-    state.allNodesAllFloors.push(newNode)
-    markNavigationDataChanged()
-    void _cb.initializeNavigation()
-    logger.log(`[Dev] Added node ${newNode.uid} at ${newNode.lat},${newNode.lng}`)
-    panel.style.display = 'none'
-    refreshAll()
+    void (async () => {
+      const committed = await commitEdit({ type: 'add-node', node: newNode })
+      if (committed) {
+        logger.log(`[Dev] Added node ${newNode.uid} at ${newNode.lat},${newNode.lng}`)
+      }
+      panel.style.display = 'none'
+    })()
   })
   const cancel = panel.querySelector('#dev-add-cancel')
   cancel?.addEventListener('click', () => {
@@ -1147,16 +1174,17 @@ function showEditForm(node: Node): void {
     const lng = parseFloat(getFormString(fd, 'lng'))
     const nodeType = getFormString(fd, 'type') || 'room'
 
-    if (!isNaN(lat)) node.lat = lat
-    if (!isNaN(lng)) node.lng = lng
-    if (rooms.length > 0) node.rooms = rooms
-    node.type = isEditableNodeType(nodeType) ? nodeType : 'room'
-
-    markNavigationDataChanged()
-    void _cb.initializeNavigation()
-    logger.log(`[Dev] Updated node ${node.uid}`)
-    panel.style.display = 'none'
-    refreshAll()
+    const changes: Partial<Node> = {
+      lat: Number.isNaN(lat) ? node.lat : lat,
+      lng: Number.isNaN(lng) ? node.lng : lng,
+      rooms: rooms.length > 0 ? rooms : node.rooms,
+      type: isEditableNodeType(nodeType) ? nodeType : 'room',
+    }
+    void (async () => {
+      const committed = await commitEdit({ type: 'update-node', uid: node.uid, changes })
+      if (committed) logger.log(`[Dev] Updated node ${node.uid}`)
+      panel.style.display = 'none'
+    })()
   })
   const cancel = panel.querySelector('#dev-edit-cancel')
   cancel?.addEventListener('click', () => {
@@ -1181,15 +1209,15 @@ function confirmDeleteNode(node: Node): void {
 `
   const confirmBtn = panel.querySelector('#dev-delete-confirm')
   confirmBtn?.addEventListener('click', () => {
-    if (state.selectedStartNode?.uid === node.uid) state.selectedStartNode = null
-    if (state.selectedEndNode?.uid === node.uid) state.selectedEndNode = null
-    state.collectedNodes = state.collectedNodes.filter((n) => n.uid !== node.uid)
-    state.allNodesAllFloors = state.allNodesAllFloors.filter((n) => n.uid !== node.uid)
-    markNavigationDataChanged()
-    void _cb.initializeNavigation()
-    logger.log(`[Dev] Deleted node ${node.uid}`)
-    panel.style.display = 'none'
-    refreshAll()
+    void (async () => {
+      const committed = await commitEdit({ type: 'remove-node', uid: node.uid })
+      if (committed) {
+        if (state.selectedStartNode?.uid === node.uid) state.selectedStartNode = null
+        if (state.selectedEndNode?.uid === node.uid) state.selectedEndNode = null
+        logger.log(`[Dev] Deleted node ${node.uid}`)
+      }
+      panel.style.display = 'none'
+    })()
   })
   const cancel = panel.querySelector('#dev-delete-cancel')
   cancel?.addEventListener('click', () => {
@@ -1263,19 +1291,18 @@ function handleZoneClick(latlng: L.LatLng): void {
       bounds: { minLat, minLng, maxLat, maxLng },
       intensity,
     }
-    state.allTrafficZones.push(zone)
-    state.trafficZones.push(zone)
-    if (_zoneRect && state.map) {
-      state.trafficZoneRects.push(_zoneRect)
-    }
-    _zoneRect = null
-    _zoneCorner1 = null
-
-    markNavigationDataChanged()
-    void _cb.initializeNavigation()
-    logger.log(`[Dev] Added zone ${zone.uid} congestion=${intensity}`)
-    panel.style.display = 'none'
-    refreshAll()
+    void (async () => {
+      const committed = await commitEdit({ type: 'add-zone', zone })
+      if (committed && _zoneRect) {
+        state.trafficZoneRects.push(_zoneRect)
+        logger.log(`[Dev] Added zone ${zone.uid} congestion=${intensity}`)
+      } else if (_zoneRect && state.map) {
+        state.map.removeLayer(_zoneRect)
+      }
+      _zoneRect = null
+      _zoneCorner1 = null
+      panel.style.display = 'none'
+    })()
   })
   const cancel = panel.querySelector('#dev-zone-cancel')
   cancel?.addEventListener('click', () => {

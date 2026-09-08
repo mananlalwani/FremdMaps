@@ -179,7 +179,7 @@ import '../styles/navigation-utilities.css'
 
   <!-- Primary navigation action buttons.
        #find-route-btn  → route-actions.ts (disabled until nodes load)
-       #clear-route-btn → clearRoute() from route-display.ts. -->
+       #clear-route-btn clears the active route and location inputs. -->
   <div class="button-group">
     <button id="find-route-btn" class="primary" data-i18n="route.go">Go</button>
     <button id="clear-route-btn" class="secondary" data-i18n="route.clear">Clear</button>
@@ -203,13 +203,13 @@ import '../styles/navigation-utilities.css'
 
   <!-- Route status area — hidden until a route is active.
        #route-status-details text is set by showStatusMessage() in Map.astro.
-       #directions-list is populated by route-display.ts with
+       #directions-list is populated by the active-route module with
        <li class="direction-step"> elements. -->
   <div id="route-status" style="display: none;" aria-live="polite" aria-atomic="true">
     <p id="route-status-details" class="status-line" data-i18n="route.follow">
       Follow the amber path on the map
     </p>
-    <!-- Turn-by-turn directions populated by route-display.ts -->
+    <!-- Turn-by-turn directions populated by the active-route module -->
     <ol
       id="directions-list"
       role="list"

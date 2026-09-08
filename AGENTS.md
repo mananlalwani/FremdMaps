@@ -34,9 +34,9 @@ pnpm audit --audit-level high   # security audit
 client/src/
   components/     Map.astro (orchestrator), NavigationPanel.astro, OnboardingOverlay.astro
   pages/          index.astro — single page, global design tokens and PWA registration
-  map/            map-state.ts, map-init.ts, route-display.ts, graph-controller.ts,
-                  panel-behavior.ts, favorites-ui.ts, search-ui.ts, route-actions.ts,
-                  schedule-ui.ts, dev-tools.ts
+  navigation/     navigationData.ts, routePlanner.ts, activeRoute.ts, graphController.ts
+  map/            map-state.ts, map-init.ts, panel-behavior.ts, favorites-ui.ts,
+                  search-ui.ts, route-actions.ts, schedule-ui.ts, dev-tools.ts
   workers/        graph-worker.ts — builds the visibility graph off the main thread
   utils/          types.ts, constants.ts, geometry.ts, graph.ts, pathfinding.ts,
                   directions.ts, search.ts, storage.ts, logger.ts
@@ -115,7 +115,7 @@ import { logger, graphLogger, routeLogger, searchLogger } from '../utils/logger'
 
 **Astro components**: `<style is:global>` when styling elements created via `innerHTML`/JS — scoped styles don't reach dynamic DOM.
 
-**Callback injection**: `map/` modules expose `set*Callbacks()` to avoid circular imports; the `Map.astro` script injects dependencies at startup. Do not call callback-dependent exports before initialization.
+**Composition root**: `Map.astro` creates the navigation-data, route-planning, and active-route modules, then passes their interfaces to the map and UI modules. Keep graph state, cache keys, route layers, and invalidation inside `navigation/`.
 
 **Web Worker boundary**: graph-worker messages must use structured-cloneable data. The graph `Map` is structured-cloned between the worker and main thread. Keep a main-thread fallback for worker creation or execution failures.
 
@@ -126,11 +126,12 @@ import { logger, graphLogger, routeLogger, searchLogger } from '../utils/logger'
 ## Domain Concepts
 
 - **Visibility graph**: same-floor nodes connect when line-of-sight is clear and distance ≤ 800 px (`MAP_CONFIG.MAX_HALLWAY_DISTANCE`); per-floor RBush indexes reduce wall candidates, while node pairing remains O(N²)
-- **Graph lifecycle**: `graph-controller.ts` sends all-floor nodes, walls, and zones to `graph-worker.ts`; invalidate both graph and path caches whenever navigation data changes
+- **Navigation-data lifecycle**: `navigationData.ts` publishes coherent revisions. Initial all-floor failure may publish a limited current-floor revision; later reload failure retains the last coherent revision. Developer-tool edits publish only after validation and graph compilation succeed.
+- **Graph lifecycle**: `navigation/graphController.ts` sends a navigation-data revision to `graph-worker.ts`. `routePlanner.ts` owns compiled revisions and never plans against a stale one.
 - **Pathfinding**: `findPath()` uses A* with a binary min-heap; `findNearestBathroom()` uses one Dijkstra traversal when a graph is available
 - **Traffic zones**: `TrafficZone.intensity` multiplies edge cost when an edge endpoint is inside a zone; stored in `zones.json`
 - **Stairways**: cross-floor portal nodes; `connectsTo` links floors by stairway room name (for example `["A"]`) with legacy UID support
-- **Directions**: route rendering lives in `map/route-display.ts`; pure direction helpers live in `utils/directions.ts`. Keep `DirectionStep` in `types.ts` synchronized with both
+- **Directions**: active-route rendering lives in `navigation/activeRoute.ts`; pure direction helpers live in `utils/directions.ts`. Keep `DirectionStep` in `types.ts` synchronized with both
 - **Node types**: `room` | `waypoint` | `bathroom` | `stairway` — waypoints are invisible and not searchable
 - **Walls on disk**: arrays of `[lat, lng][]` polylines; `convertWallData()` expands consecutive points into `Wall` segments `{start, end}`
 - **Route cost**: graph edge costs may include diagonal-alignment, traffic, and stair penalties, so `PathResult.distance` is a weighted route cost rather than guaranteed physical distance

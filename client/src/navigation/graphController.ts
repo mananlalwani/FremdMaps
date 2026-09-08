@@ -1,4 +1,4 @@
-/** Visibility-graph worker lifecycle with a safe main-thread fallback. */
+/** Internal visibility-graph execution with worker and main-thread adapters. */
 
 import { MAP_CONFIG } from '../utils/constants'
 import { graphLogger } from '../utils/logger'

@@ -1,30 +1,24 @@
 /** Search autocomplete and recent-search UI controller. */
 
 import { FEATURED_ROOMS, SEARCH_CONFIG } from '../config/featured'
-import {
-  findExactMatch,
-  getCategoryIcon,
-  getCategoryLabel,
-  inferCategory,
-  rankWithRecency,
-  searchNodes,
-} from '../utils/search'
+import { getCategoryIcon, getCategoryLabel, inferCategory } from '../utils/search'
 import { t } from '../utils/i18n'
 import {
   clearRecentSearches,
   getFavorites,
-  getFrequentRooms,
   getRecentSearches,
   isFavorite,
   removeRecentSearch,
   trackSearch,
   toggleFavorite,
 } from '../utils/storage'
-import type { Node, SearchResult } from '../utils/types'
 import { state } from './map-state'
+import type { Node, SearchResult } from '../utils/types'
+import type { RoutePlanner } from '../navigation/routePlanner'
 
 type SearchType = 'start' | 'end'
 let resultId = 0
+let planner: RoutePlanner | null = null
 
 function resultLabel(result: SearchResult): string {
   return (
@@ -40,8 +34,7 @@ function sharedDestinationFloors(label: string): string[] {
   const normalizedLabel = label.trim().toLowerCase()
   return [
     ...new Set(
-      state.allNodesAllFloors
-        .filter((node) => node.rooms.some((room) => room.trim().toLowerCase() === normalizedLabel))
+      (planner?.findExact(normalizedLabel) ?? [])
         .map((node) => node.floor)
         .filter((floor): floor is string => Boolean(floor))
     ),
@@ -221,11 +214,11 @@ function renderResults(results: SearchResult[], dropdown: HTMLElement, type: Sea
 
 function showSuggestions(dropdown: HTMLElement, type: SearchType): void {
   const favoriteNodes = getFavorites()
-    .map((uid) => state.allNodesAllFloors.find((node) => node.uid === uid))
+    .map((uid) => planner?.getDestinations().find((node) => node.uid === uid))
     .filter((node): node is Node => Boolean(node))
-  const featuredNodes = FEATURED_ROOMS.map((room) =>
-    findExactMatch(room, state.allNodesAllFloors)
-  ).filter((node): node is Node => Boolean(node))
+  const featuredNodes = FEATURED_ROOMS.map((room) => planner?.findExact(room)[0]).filter(
+    (node): node is Node => Boolean(node)
+  )
   const rooms = [
     ...new Map([...favoriteNodes, ...featuredNodes].map((node) => [node.uid, node])).values(),
   ]
@@ -258,9 +251,11 @@ function setupInput(type: SearchType): () => void {
     const results = prioritizeFavorites(
       collapseSharedDestinationResults(
         rankByRouteProximity(
-          rankWithRecency(
-            searchNodes(query, state.allNodesAllFloors, { limit: SEARCH_CONFIG.MAX_RESULTS }),
-            getFrequentRooms()
+          (
+            planner?.search(query, {
+              limit: SEARCH_CONFIG.MAX_RESULTS,
+              preferredFloor: state.selectedStartNode?.floor ?? state.currentFloor,
+            }) ?? []
           ).filter(
             (result) =>
               result.node.type === 'room' ||
@@ -273,7 +268,6 @@ function setupInput(type: SearchType): () => void {
       )
     )
     trackSearch(query, results.length)
-    state.currentSearchResults = results
     renderResults(results, dropdown, type)
   }
   input.addEventListener(
@@ -289,7 +283,6 @@ function setupInput(type: SearchType): () => void {
   input.addEventListener(
     'focus',
     () => {
-      state.activeDropdown = type
       update()
     },
     { signal: controller.signal }
@@ -322,7 +315,6 @@ function setupInput(type: SearchType): () => void {
         applyActiveIndex()
       } else if (event.key === 'Escape') {
         event.preventDefault()
-        state.activeDropdown = null
         hide(dropdown)
       } else if (event.key === 'Enter' && options[activeIndex >= 0 ? activeIndex : 0]) {
         event.preventDefault()
@@ -401,7 +393,11 @@ interface SearchUiController {
   cleanup: () => void
 }
 
-export function setupSearchUI(onRouteRequested: () => void): SearchUiController {
+export function setupSearchUI(
+  onRouteRequested: () => void,
+  routePlanner: RoutePlanner
+): SearchUiController {
+  planner = routePlanner
   const cleanups = [setupInput('start'), setupInput('end')]
   updateRecentSearchesUI(onRouteRequested)
   const toggle = document.getElementById('recent-toggle-btn')
@@ -421,6 +417,7 @@ export function setupSearchUI(onRouteRequested: () => void): SearchUiController 
     cleanup: () => {
       controller.abort()
       cleanups.forEach((cleanup) => cleanup())
+      planner = null
     },
   }
 }

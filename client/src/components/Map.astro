@@ -39,15 +39,14 @@ import '../styles/map.css'
 <script>
   import 'leaflet/dist/leaflet.css'
   import L from 'leaflet'
-  import type { Graph } from '../utils/types'
-  import { MAP_CONFIG, UI_CONFIG } from '../utils/constants'
+  import { UI_CONFIG } from '../utils/constants'
   import { logger } from '../utils/logger'
-
-  import { invalidateSearchCache } from '../utils/search'
+  import { createNavigationData } from '../navigation/navigationData'
+  import { createRoutePlanner } from '../navigation/routePlanner'
+  import { createActiveRoute } from '../navigation/activeRoute'
 
   // Map modules
   import { state } from '../map/map-state'
-  import { createGraphController } from '../map/graph-controller'
   import { cancelPendingDataLoad, initMap as _initMap, switchFloor } from '../map/map-init'
   import { setupPanelBehavior } from '../map/panel-behavior'
   import { setupRouteActions } from '../map/route-actions'
@@ -56,11 +55,6 @@ import '../styles/map.css'
     setupSearchUI,
     updateRecentSearchesUI as refreshRecentSearchesUI,
   } from '../map/search-ui'
-  import {
-    setRouteDisplayCallbacks,
-    redrawRouteForCurrentFloor,
-    clearRoute,
-  } from '../map/route-display'
   const urlParams = new URLSearchParams(window.location.search)
   // `NODE_ENV=production` can be inherited by a local `astro dev` process,
   // which makes Vite's `DEV` flag false even though its mode remains
@@ -70,57 +64,49 @@ import '../styles/map.css'
     window.location.hostname
   )
 
-  // ========== GRAPH STATE ==========
+  // ========== NAVIGATION MODULES ==========
 
-  /** Visibility graph built by initializeNavigation and used by route-action controllers. */
-  let _graph: Graph | null = null
-  const graphController = createGraphController()
+  const navigationData = createNavigationData()
+  const routePlanner = createRoutePlanner(navigationData)
+  const activeRoute = createActiveRoute({
+    switchFloor,
+    getWalls: () => navigationData.getSnapshot()?.walls ?? [],
+  })
   let _searchEnhancementsInitialized = false
   let cleanupSearchUi: (() => void) | null = null
-  let navigationBuildRequestId = 0
 
-  // ========== SAFE DOM HELPERS (XSS Prevention) ==========
+  const unsubscribeNavigationData = navigationData.subscribe((_snapshot, reason) => {
+    const floorData = navigationData.getFloor(state.currentFloor)
+    state.collectedNodes = floorData.nodes
+    state.collectedWalls = floorData.walls.map((wall) => [
+      [wall.start.lat, wall.start.lng],
+      [wall.end.lat, wall.end.lng],
+    ])
+    state.trafficZones = floorData.zones
+    if (reason !== 'load') activeRoute.clear()
+    void initializeNavigation()
+  })
 
   // ========== NAVIGATION LOGIC ==========
 
   /**
-   * Called by map-init after floor data finishes loading.
-   * Builds the client-side visibility graph, invalidates the search cache,
-   * initialises the search and recent-route UI, then enables the navigation
-   * action buttons.
+   * Initialises search as soon as navigation data is available and keeps route
+   * actions disabled until the matching compiled revision is ready.
    */
   async function initializeNavigation(): Promise<void> {
-    const requestId = ++navigationBuildRequestId
-    if (state.allNodesAllFloors.length < 2) {
+    if ((navigationData.getSnapshot()?.nodes.length ?? 0) < 2) {
       logger.warn('Not enough nodes for navigation (need at least 2)')
       return
     }
 
-    const graphCacheKey = `${state.graphDataRevision}:${MAP_CONFIG.MAX_HALLWAY_DISTANCE}`
-
-    const previousGraph = _graph
-    const nextGraph = await graphController.ensureGraph(
-      state.allNodesAllFloors,
-      state.wallObjects,
-      state.allTrafficZones,
-      graphCacheKey
-    )
-    // A newer edit/reload may have started another build while this worker
-    // request was running. Only the newest graph is allowed to update the UI.
-    if (requestId !== navigationBuildRequestId) return
-    _graph = nextGraph
-    if (_graph !== previousGraph) {
-      invalidateSearchCache()
-    }
-
     if (!_searchEnhancementsInitialized) {
-      cleanupSearchUi = setupSearchUI(requestRoute).cleanup
+      cleanupSearchUi = setupSearchUI(requestRoute, routePlanner).cleanup
       _searchEnhancementsInitialized = true
     } else {
       refreshRecentSearchesUI(requestRoute)
     }
 
-    setNavButtonsDisabled(false)
+    setNavButtonsDisabled(routePlanner.getStatus().state !== 'ready')
   }
 
   /**
@@ -179,12 +165,13 @@ import '../styles/map.css'
 
   // ========== WIRE UP CALLBACKS ==========
 
-  setRouteDisplayCallbacks({ switchFloor })
-
   _initMap({
-    clearRoute,
-    redrawRouteForCurrentFloor,
-    initializeNavigation,
+    navigationData,
+    activeRouteFloorChanged: activeRoute.floorChanged,
+  })
+
+  const unsubscribePlanner = routePlanner.subscribe((status) => {
+    setNavButtonsDisabled(status.state !== 'ready')
   })
 
   // Dev tools are lazy-loaded and exposed for local development/preview. A
@@ -196,11 +183,11 @@ import '../styles/map.css'
   if (devToolsEnabled) {
     const { initDevTools, handleMapClick } = await import('../map/dev-tools')
     initDevTools({
-      getGraph: () => _graph,
-      initializeNavigation,
+      navigationData,
+      routePlanner,
       switchFloor,
-      clearRoute,
-      redrawRouteForCurrentFloor,
+      clearRoute: activeRoute.clear,
+      redrawRouteForCurrentFloor: activeRoute.floorChanged,
     })
     state.map?.on('click', (e: L.LeafletMouseEvent) => {
       handleMapClick(e.latlng)
@@ -214,9 +201,20 @@ import '../styles/map.css'
   const listenerSignal = listenerController.signal
   const clearRouteBtn = document.getElementById('clear-route-btn')
 
-  if (clearRouteBtn) clearRouteBtn.addEventListener('click', clearRoute, { signal: listenerSignal })
+  const clearRouteAndInputs = (): void => {
+    activeRoute.clear()
+    const startInput = document.querySelector<HTMLInputElement>('#start-input')
+    const endInput = document.querySelector<HTMLInputElement>('#end-input')
+    if (startInput) startInput.value = ''
+    if (endInput) endInput.value = ''
+    state.selectedStartNode = null
+    state.selectedEndNode = null
+  }
 
-  const scheduleUi = setupScheduleModal(() => _graph)
+  if (clearRouteBtn)
+    clearRouteBtn.addEventListener('click', clearRouteAndInputs, { signal: listenerSignal })
+
+  const scheduleUi = setupScheduleModal(routePlanner, activeRoute)
 
   // Floor switcher
   document.querySelectorAll('.floor-btn').forEach((btn) => {
@@ -234,7 +232,8 @@ import '../styles/map.css'
   const { collapseForRoute: collapsePanelForRoute } = panelBehavior
   let requestRoute: () => void = () => undefined
   const routeActions = setupRouteActions({
-    getGraph: () => _graph,
+    planner: routePlanner,
+    activeRoute,
     collapsePanel: collapsePanelForRoute,
     refreshRecent: () => refreshRecentSearchesUI(requestRoute),
     showStatus: showStatusMessage,
@@ -243,21 +242,10 @@ import '../styles/map.css'
 
   // Cleanup on page unload
   window.addEventListener('beforeunload', () => {
-    for (const m of state.routeMarkers) {
-      if ('__isOutline' in m) {
-        state.map?.removeLayer(m.layer)
-      } else {
-        state.map?.removeLayer(m)
-      }
-    }
-    state.routeMarkers = []
-
-    if (state.currentRoute) {
-      state.map?.removeLayer(state.currentRoute)
-      state.currentRoute = null
-    }
-
-    graphController.terminate()
+    unsubscribePlanner()
+    unsubscribeNavigationData()
+    activeRoute.dispose()
+    routePlanner.dispose()
     cancelPendingDataLoad()
     listenerController.abort()
     cleanupSearchUi?.()

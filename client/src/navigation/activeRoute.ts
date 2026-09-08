@@ -1,49 +1,46 @@
-/**
- * Route display, clearing, and turn-by-turn directions.
- *
- * This module owns:
- *   - `displayRoute`        — entry point after A* finds a path
- *   - `redrawRouteForCurrentFloor` — re-renders the route when floors switch
- *   - `clearRoute`          — removes all route visuals and resets state
- *   - `generateDirections`  — builds the #directions-list from the full path
- */
+/** Active-route presentation, clearing, floor projection, and turn-by-turn directions. */
 
 import L from 'leaflet'
 import { simplifyPath } from '../utils/geometry'
 import { buildDirectionSteps } from '../utils/directions'
 import { t } from '../utils/i18n'
-import type { Node } from '../utils/types'
 import { MAP_CONFIG, UI_CONFIG } from '../utils/constants'
 import { routeLogger } from '../utils/logger'
-import { state } from './map-state'
+import { state } from '../map/map-state'
+import type { Node, Wall } from '../utils/types'
+import type { RoutePlan } from './routePlanner'
 
-/**
- * Callbacks injected by the Map.astro orchestrator to avoid a circular import
- * between `route-display` and `map-init` (which both need each other's
- * functions).
- */
-export interface RouteDisplayCallbacks {
-  /** Switch the visible floor to `floorId` and reload floor data. */
-  switchFloor: (floorId: string) => void
+/** The complete interface for the route currently shown to the visitor. */
+export interface ActiveRoute {
+  show(plan: RoutePlan): void
+  clear(): void
+  floorChanged(): void
+  dispose(): void
 }
 
-let _cb: RouteDisplayCallbacks
+interface ActiveRouteOptions {
+  switchFloor(floorId: string): void
+  getWalls(): readonly Wall[]
+}
 
-export function escapeHtml(value: string): string {
+interface ActiveRouteState {
+  fullPath: Node[]
+  currentRoute: L.Polyline | null
+  markers: Array<L.Marker | L.Polyline | { __isOutline: true; layer: L.Polyline }>
+}
+
+interface ActiveRouteContext {
+  route: ActiveRouteState
+  options: ActiveRouteOptions
+}
+
+function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
-}
-
-/**
- * Inject the callbacks from the Map.astro orchestrator.
- * Must be called once before `displayRoute` is invoked.
- */
-export function setRouteDisplayCallbacks(callbacks: RouteDisplayCallbacks): void {
-  _cb = callbacks
 }
 
 function updateRouteStatus(path: Node[]): void {
@@ -59,10 +56,10 @@ function updateRouteStatus(path: Node[]): void {
  * Stores the full path for multi-floor redraws, then calls
  * `redrawRouteForCurrentFloor` to paint the visible portion.
  */
-export function displayRoute(path: Node[], _totalDistance: number): void {
-  clearRoute()
+function displayRoute(context: ActiveRouteContext, path: Node[], _totalDistance: number): void {
+  clearRoute(context)
 
-  state.currentRouteFullPath = path
+  context.route.fullPath = path
 
   const floors = [...new Set(path.map((n) => n.floor).filter((f): f is string => Boolean(f)))]
   const isMultiFloor = floors.length > 1
@@ -73,14 +70,14 @@ export function displayRoute(path: Node[], _totalDistance: number): void {
   const startFloor = path[0]?.floor
   if (startFloor && startFloor !== state.currentFloor) {
     routeLogger.log(`Switching to route start floor ${startFloor} from ${state.currentFloor}`)
-    _cb.switchFloor(startFloor)
+    context.options.switchFloor(startFloor)
   }
 
   if (isMultiFloor) {
     routeLogger.log(`Multi-floor route detected: ${floors.join(', ')}`)
   }
 
-  redrawRouteForCurrentFloor()
+  redrawRouteForCurrentFloor(context)
 
   const routeStatus = document.getElementById('route-status')
   if (routeStatus) {
@@ -89,30 +86,24 @@ export function displayRoute(path: Node[], _totalDistance: number): void {
   }
   updateRouteStatus(path)
 
-  generateDirections(path, state.currentFloor)
+  generateDirections(context, path, state.currentFloor)
 }
-
-window.addEventListener('fremdmaps:locale-change', () => {
-  if (state.currentRouteFullPath.length === 0) return
-  updateRouteStatus(state.currentRouteFullPath)
-  generateDirections(state.currentRouteFullPath, state.currentFloor)
-})
 
 /**
  * Re-render the stored route for whichever floor is currently active.
  * Splits the full path into contiguous per-floor segments and draws only the
  * ones that belong to `state.currentFloor`.
  */
-export function redrawRouteForCurrentFloor(): void {
+function redrawRouteForCurrentFloor(context: ActiveRouteContext): void {
   if (!state.map) return
 
-  // Clear existing route visuals (but keep currentRouteFullPath)
-  if (state.currentRoute) {
-    state.map.removeLayer(state.currentRoute)
-    state.currentRoute = null
+  // Clear visible artifacts while preserving the full route plan.
+  if (context.route.currentRoute) {
+    state.map.removeLayer(context.route.currentRoute)
+    context.route.currentRoute = null
   }
 
-  state.routeMarkers.forEach((m) => {
+  context.route.markers.forEach((m) => {
     // `__isOutline` distinguishes the outline-polyline wrapper objects from
     // plain `L.Marker` instances stored in the same array.  Using an `in`
     // check (rather than instanceof) works because the wrapper is a plain
@@ -123,9 +114,9 @@ export function redrawRouteForCurrentFloor(): void {
       state.map!.removeLayer(m)
     }
   })
-  state.routeMarkers = []
+  context.route.markers = []
 
-  if (state.currentRouteFullPath.length === 0) {
+  if (context.route.fullPath.length === 0) {
     const banner = document.getElementById('multi-floor-banner')
     if (banner && banner.style.display !== 'none') {
       banner.classList.add('hiding')
@@ -141,7 +132,7 @@ export function redrawRouteForCurrentFloor(): void {
     return
   }
 
-  const path = state.currentRouteFullPath
+  const path = context.route.fullPath
 
   const floorsInRoute = [
     ...new Set(path.map((n) => n.floor).filter((f): f is string => Boolean(f))),
@@ -162,7 +153,7 @@ export function redrawRouteForCurrentFloor(): void {
       banner.classList.remove('hiding')
       banner.style.display = 'flex'
       if (bannerSwitchBtn) {
-        bannerSwitchBtn.onclick = () => _cb.switchFloor(otherFloors[0])
+        bannerSwitchBtn.onclick = () => context.options.switchFloor(otherFloors[0])
       }
     } else {
       banner.style.display = 'none'
@@ -205,7 +196,7 @@ export function redrawRouteForCurrentFloor(): void {
     return
   }
 
-  const floorWalls = state.wallObjects.filter((wall) => wall.floor === state.currentFloor)
+  const floorWalls = context.options.getWalls().filter((wall) => wall.floor === state.currentFloor)
 
   // Draw each contiguous segment
   for (const segment of segments) {
@@ -233,7 +224,7 @@ export function redrawRouteForCurrentFloor(): void {
       lineCap: 'round',
       lineJoin: 'round',
     }).addTo(state.map)
-    state.routeMarkers.push({ __isOutline: true, layer: routeOutline })
+    context.route.markers.push({ __isOutline: true, layer: routeOutline })
 
     const segPolyline = L.polyline(coords, {
       color: UI_CONFIG.ROUTE_PATH_COLOR,
@@ -242,12 +233,9 @@ export function redrawRouteForCurrentFloor(): void {
       lineCap: 'round',
       lineJoin: 'round',
     }).addTo(state.map)
-    // Track every segment polyline in routeMarkers so none leak on cleanup.
-    // state.currentRoute is updated to the last segment drawn — it is used
-    // by clearRoute() and redrawRouteForCurrentFloor() as a quick handle to
-    // remove the most-recently-drawn line before routeMarkers clears the rest.
-    state.routeMarkers.push(segPolyline)
-    state.currentRoute = segPolyline
+    // Track every segment so floor changes and teardown remove every artifact.
+    context.route.markers.push(segPolyline)
+    context.route.currentRoute = segPolyline
   }
 
   // Start marker
@@ -262,7 +250,7 @@ export function redrawRouteForCurrentFloor(): void {
     const startMarker = L.marker([startNode.lat, startNode.lng], { icon: startIcon }).addTo(
       state.map
     )
-    state.routeMarkers.push(startMarker)
+    context.route.markers.push(startMarker)
   }
 
   // End marker
@@ -275,7 +263,7 @@ export function redrawRouteForCurrentFloor(): void {
       iconAnchor: [18, 18],
     })
     const endMarker = L.marker([endNode.lat, endNode.lng], { icon: endIcon }).addTo(state.map)
-    state.routeMarkers.push(endMarker)
+    context.route.markers.push(endMarker)
   }
 
   // Stairway portal markers
@@ -307,9 +295,9 @@ export function redrawRouteForCurrentFloor(): void {
 
       const stairMarker = L.marker([node.lat, node.lng], { icon: stairIcon }).addTo(state.map)
 
-      stairMarker.on('click', () => _cb.switchFloor(targetFloor))
+      stairMarker.on('click', () => context.options.switchFloor(targetFloor))
 
-      state.routeMarkers.push(stairMarker)
+      context.route.markers.push(stairMarker)
     }
   }
 
@@ -327,34 +315,32 @@ export function redrawRouteForCurrentFloor(): void {
     }
   }
 
-  generateDirections(state.currentRouteFullPath, state.currentFloor)
+  generateDirections(context, context.route.fullPath, state.currentFloor)
 }
 
 /**
  * Remove all route visuals from the map and reset related state.
  */
-export function clearRoute(): void {
+function clearRoute(context: ActiveRouteContext): void {
   if (!state.map) return
 
-  if (state.currentRoute) {
-    state.map.removeLayer(state.currentRoute)
-    state.currentRoute = null
+  if (context.route.currentRoute) {
+    state.map.removeLayer(context.route.currentRoute)
+    context.route.currentRoute = null
   }
 
-  state.currentRouteFullPath = []
+  context.route.fullPath = []
 
-  state.routeMarkers.forEach((m) => {
+  context.route.markers.forEach((m) => {
     if ('__isOutline' in m) {
       state.map!.removeLayer(m.layer)
     } else {
       state.map!.removeLayer(m)
     }
   })
-  state.routeMarkers = []
+  context.route.markers = []
 
   const routeStatus = document.getElementById('route-status')
-  const startInput = document.querySelector<HTMLInputElement>('#start-input')
-  const endInput = document.querySelector<HTMLInputElement>('#end-input')
   const directionsList = document.getElementById('directions-list')
 
   if (routeStatus && routeStatus.style.display !== 'none') {
@@ -368,12 +354,7 @@ export function clearRoute(): void {
       { once: true }
     )
   }
-  if (startInput) startInput.value = ''
-  if (endInput) endInput.value = ''
   if (directionsList) directionsList.innerHTML = ''
-
-  state.selectedStartNode = null
-  state.selectedEndNode = null
 }
 
 /**
@@ -383,11 +364,11 @@ export function clearRoute(): void {
  * renderer marks steps on the active floor as `.active` and prior floors as
  * `.completed`.
  */
-export function generateDirections(path: Node[], activeFloor: string): void {
+function generateDirections(context: ActiveRouteContext, path: Node[], activeFloor: string): void {
   const list = document.getElementById('directions-list')
   if (!list || path.length === 0) return
 
-  const steps = buildDirectionSteps(path, state.wallObjects)
+  const steps = buildDirectionSteps(path, context.options.getWalls())
 
   // Build an ordered list of unique floors as they appear in the path.
   // `floorOrder[0]` is the departure floor, `floorOrder[N-1]` is the arrival
@@ -449,4 +430,34 @@ export function generateDirections(path: Node[], activeFloor: string): void {
   }
 
   list.appendChild(fragment)
+}
+
+/** Create the single active-route lifecycle for a map instance. */
+export function createActiveRoute(options: ActiveRouteOptions): ActiveRoute {
+  const context: ActiveRouteContext = {
+    route: { fullPath: [], currentRoute: null, markers: [] },
+    options,
+  }
+  const handleLocaleChange = (): void => {
+    if (context.route.fullPath.length === 0) return
+    updateRouteStatus(context.route.fullPath)
+    generateDirections(context, context.route.fullPath, state.currentFloor)
+  }
+  window.addEventListener('fremdmaps:locale-change', handleLocaleChange)
+
+  return {
+    show(plan): void {
+      displayRoute(context, plan.path, plan.cost)
+    },
+    clear(): void {
+      clearRoute(context)
+    },
+    floorChanged(): void {
+      redrawRouteForCurrentFloor(context)
+    },
+    dispose(): void {
+      clearRoute(context)
+      window.removeEventListener('fremdmaps:locale-change', handleLocaleChange)
+    },
+  }
 }

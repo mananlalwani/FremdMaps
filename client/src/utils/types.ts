@@ -24,7 +24,7 @@ export interface Point {
  *
  * Produced by: the developer editor and static `nodes.json` files.
  * Consumed by: `buildVisibilityGraph`, `findPath`, `searchNodes`,
- *   `addMarker`, route-display rendering.
+ *   route planning and active-route rendering.
  */
 export interface Node {
   /** Globally unique identifier (UUID v4). */
@@ -163,7 +163,7 @@ export type WalkTurn = 'straight' | 'bear-left' | 'bear-right' | 'left' | 'right
  * A single step in the turn-by-turn directions list.
  *
  * Produced by: `buildDirectionSteps` in `directions.ts`.
- * Rendered by: `generateDirections` in `route-display.ts`.
+ * Rendered by the active-route module.
  * Consumed by: the `#directions-list` DOM rendering loop.
  */
 export interface DirectionStep {

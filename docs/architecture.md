@@ -9,9 +9,10 @@ and routing run in the visitor's browser.
 ```text
 Browser
   └─ Cloudflare Worker → Astro assets, floor-plan PNGs, and JSON floor data
-       └─ Map.astro → map initialization + focused map modules
-            ├─ Web Worker → wall-aware visibility graph
-            └─ A* + directions helpers → route, floor-transition prompts, and UI
+       └─ Map.astro → navigation modules + map and UI modules
+            ├─ Navigation data → coherent complete or limited revision
+            ├─ Route planner → Web Worker graph + A*
+            └─ Active route → map layers, floor-transition prompts, and directions
 ```
 
 At startup, the client attempts to load every configured floor's `nodes.json`, `walls.json`, and
@@ -35,12 +36,23 @@ routing is unavailable until a complete load succeeds.
 
 ## Client modules and state
 
-`src/components/Map.astro` is the composition root. It initializes the map and injects callbacks
-between focused modules for routing, search, favorites, schedules, responsive panel behavior, and
-developer tools. This callback setup avoids circular dependencies. Shared state and graph revision
-tracking live in `src/map/map-state.ts`. Navigation-data reloads advance the graph revision, which
-prevents stale graph and path results from being reused; developer-tool edits also explicitly clear
-the graph-related search and path caches.
+`src/components/Map.astro` is the composition root. It creates three navigation modules and passes
+their interfaces to the map and UI modules:
+
+- `src/navigation/navigationData.ts` loads, validates, and publishes navigation-data revisions.
+  A limited revision always matches the requested current floor. Reload failures keep the last
+  coherent revision.
+- `src/navigation/routePlanner.ts` owns graph compilation, search, endpoint resolution, and route
+  planning. It plans only when its compiled graph matches the current navigation-data revision.
+- `src/navigation/activeRoute.ts` owns the route layers, floor projection, transition prompt, and
+  turn-by-turn directions for one map instance.
+
+Developer-tool edits use the same navigation-data lifecycle as loaded JSON. An edit is visible only
+after navigation-data validation and graph compilation both succeed. The developer tools receive
+render-ready graph connections for diagnostics rather than the graph itself.
+
+`src/map/map-state.ts` contains only Leaflet and current-floor UI state. Graphs, cache keys, compiled
+revisions, and active-route layers remain private to the navigation modules.
 
 ## Offline behavior and hosting
 

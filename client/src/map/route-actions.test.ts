@@ -1,24 +1,34 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { setupRouteActions, type RouteActionDependencies } from './route-actions'
-import { state } from './map-state'
 
-const findPathMock = vi.fn()
-const dependencies: RouteActionDependencies = {
-  translate: (key) => key,
-  findPath: findPathMock,
-  findNearestBathroom: vi.fn(),
-  searchNodes: vi.fn(() => []),
-  addRecentSearch: vi.fn(),
-  displayRoute: vi.fn(),
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setupRouteActions } from './route-actions'
+import { state } from './map-state'
+import type { ActiveRoute } from '../navigation/activeRoute'
+import type { RoutePlanner } from '../navigation/routePlanner'
+
+const plan = vi.fn<RoutePlanner['plan']>()
+const planToNearestBathroom = vi.fn<RoutePlanner['planToNearestBathroom']>()
+const planner: RoutePlanner = {
+  getStatus: () => ({ state: 'ready', revision: 1 }),
+  subscribe: () => () => undefined,
+  search: () => [],
+  findExact: () => [],
+  getDestinations: () => [],
+  plan,
+  planToNearestBathroom,
+  getDebugView: () => ({ revision: 1, stats: null, connections: [] }),
+  setMaximumHallwayDistance: () => Promise.resolve(),
+  dispose: () => undefined,
+}
+const activeRoute: ActiveRoute = {
+  show: vi.fn(),
+  clear: vi.fn(),
+  floorChanged: vi.fn(),
+  dispose: vi.fn(),
 }
 
 beforeEach(() => {
   document.body.innerHTML = '<input id="start-input" value="101"><input id="end-input" value="102">'
-  state.allNodesAllFloors = [
-    { uid: 'start', lat: -100, lng: 0, rooms: ['101'], floor: '1', type: 'room' },
-    { uid: 'end', lat: -100, lng: 100, rooms: ['102'], floor: '1', type: 'room' },
-  ]
   state.selectedStartNode = null
   state.selectedEndNode = null
 })
@@ -27,15 +37,17 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('route action failure states', () => {
-  it('explains that the map is still loading when no graph is available', () => {
+describe('route actions', () => {
+  it('explains that route planning is not ready', () => {
+    plan.mockReturnValue({ status: 'not-ready' })
     const showStatus = vi.fn()
     const actions = setupRouteActions({
-      getGraph: () => null,
+      planner,
+      activeRoute,
       collapsePanel: vi.fn(),
       refreshRecent: vi.fn(),
       showStatus,
-      dependencies,
+      translate: (key) => key,
     })
 
     actions.findRoute()
@@ -44,14 +56,15 @@ describe('route action failure states', () => {
   })
 
   it('shows a no-path error for disconnected locations', () => {
-    findPathMock.mockReturnValue({ path: [], distance: 0, found: false })
+    plan.mockReturnValue({ status: 'no-route' })
     const showStatus = vi.fn()
     const actions = setupRouteActions({
-      getGraph: () => new Map(),
+      planner,
+      activeRoute,
       collapsePanel: vi.fn(),
       refreshRecent: vi.fn(),
       showStatus,
-      dependencies,
+      translate: (key) => key,
     })
 
     actions.findRoute()

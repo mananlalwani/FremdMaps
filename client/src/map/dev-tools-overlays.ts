@@ -1,6 +1,7 @@
 import L from 'leaflet'
 import { state } from './map-state'
-import type { Graph } from '../utils/types'
+import type { NavigationData } from '../navigation/navigationData'
+import type { RoutePlanner } from '../navigation/routePlanner'
 
 export interface DevOverlayControls {
   element: HTMLElement
@@ -14,7 +15,8 @@ interface RouteControls {
 }
 
 interface GraphControls extends RouteControls {
-  getGraph(): Graph | null
+  navigationData: NavigationData
+  routePlanner: RoutePlanner
 }
 
 const NODE_COLORS = {
@@ -44,7 +46,7 @@ export function createDevOverlayControls(routeControls: GraphControls): DevOverl
     if (!state.map) return
     zoneLayerGroup = removeLayers(zoneLayerGroup)
     zoneLayerGroup = L.layerGroup().addTo(state.map)
-    for (const zone of state.allTrafficZones) {
+    for (const zone of routeControls.navigationData.getSnapshot()?.zones ?? []) {
       if (zone.floor !== state.currentFloor) continue
       const { minLat, minLng, maxLat, maxLng } = zone.bounds
       const rectangle = L.rectangle(
@@ -71,7 +73,7 @@ export function createDevOverlayControls(routeControls: GraphControls): DevOverl
     if (!state.map) return
     wallLayerGroup = removeLayers(wallLayerGroup)
     wallLayerGroup = L.layerGroup().addTo(state.map)
-    for (const wall of state.wallObjects) {
+    for (const wall of routeControls.navigationData.getSnapshot()?.walls ?? []) {
       if (wall.floor && wall.floor !== state.currentFloor) continue
       wallLayerGroup.addLayer(
         L.polyline(
@@ -89,7 +91,7 @@ export function createDevOverlayControls(routeControls: GraphControls): DevOverl
     if (!state.map) return
     nodeLayerGroup = removeLayers(nodeLayerGroup)
     nodeLayerGroup = L.layerGroup().addTo(state.map)
-    for (const node of state.collectedNodes) {
+    for (const node of routeControls.navigationData.getFloor(state.currentFloor).nodes) {
       const color = NODE_COLORS[node.type ?? 'room']
       const marker = L.circleMarker([node.lat, node.lng], {
         radius: node.type === 'waypoint' ? 2 : 4,
@@ -110,29 +112,14 @@ export function createDevOverlayControls(routeControls: GraphControls): DevOverl
   const renderGraph = (): void => {
     if (!state.map) return
     graphLayerGroup = removeLayers(graphLayerGroup)
-    const graph = routeControls.getGraph()
-    if (!graph?.size) return
-
-    const nodes =
-      state.allNodesAllFloors.length > 0 ? state.allNodesAllFloors : state.collectedNodes
-    const nodesByUid = new Map(nodes.map((node) => [node.uid, node]))
-    const edges: L.LatLngExpression[][] = []
-    const seen = new Set<string>()
-
-    for (const source of nodes) {
-      if (source.floor !== state.currentFloor) continue
-      for (const edge of graph.get(source.uid) ?? []) {
-        const target = nodesByUid.get(edge.to)
-        if (target?.floor !== state.currentFloor) continue
-        const edgeKey = [source.uid, target.uid].sort().join(':')
-        if (seen.has(edgeKey)) continue
-        seen.add(edgeKey)
-        edges.push([
-          [source.lat, source.lng],
-          [target.lat, target.lng],
-        ])
-      }
-    }
+    const debugView = routeControls.routePlanner.getDebugView()
+    if (!debugView.stats) return
+    const edges: L.LatLngExpression[][] = debugView.connections
+      .filter((connection) => connection.floor === state.currentFloor)
+      .map((connection) => [
+        [connection.start.lat, connection.start.lng],
+        [connection.end.lat, connection.end.lng],
+      ])
 
     graphLayerGroup = L.layerGroup().addTo(state.map)
     if (edges.length > 0) {

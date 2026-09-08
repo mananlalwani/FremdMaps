@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createGraphController } from './graph-controller'
+import { createGraphController } from './graphController'
 import type { Graph, Node } from '../utils/types'
 
 class FakeWorker {

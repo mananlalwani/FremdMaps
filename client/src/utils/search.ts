@@ -201,14 +201,15 @@ export function getCategoryIcon(category: RoomCategory): string {
  *
  * Stores the nodes array reference alongside the index so the cache can be
  * invalidated cheaply with a reference-equality check (`nodes === cache.nodes`).
- * Call `invalidateSearchCache()` after any session editor change that modifies nodes.
+ * Navigation revisions replace the array reference, so published edits naturally
+ * receive a new index. The explicit invalidation hook remains useful for isolated tests.
  *
  * IMPORTANT: This cache is skipped entirely when `searchNodes` is called with a
  * `categoryFilter` — filtered searches always build a fresh index for the
  * filtered subset.
  */
 let searchIndexCache: {
-  nodes: Node[]
+  nodes: readonly Node[]
   fuse: Fuse<Node>
   categoryIndices: Map<string, Fuse<Node>>
 } | null = null
@@ -231,7 +232,7 @@ let searchIndexCache: {
  * @param nodes Full node array to index.
  * @returns Configured `Fuse` instance ready for `.search()` calls.
  */
-export function createSearchIndex(nodes: Node[]): Fuse<Node> {
+export function createSearchIndex(nodes: readonly Node[]): Fuse<Node> {
   // Filter out waypoints (not searchable)
   const searchableNodes: Node[] = nodes
     .filter((node) => node.type !== 'waypoint' && !node.rooms.includes('waypoint'))
@@ -261,7 +262,7 @@ export function createSearchIndex(nodes: Node[]): Fuse<Node> {
  *   the cache.
  * @param categoryFilter Optional category filter list.
  */
-function getCachedSearchIndex(nodes: Node[], categoryFilter?: RoomCategory[]): Fuse<Node> {
+function getCachedSearchIndex(nodes: readonly Node[], categoryFilter?: RoomCategory[]): Fuse<Node> {
   if (searchIndexCache?.nodes !== nodes) {
     searchIndexCache = {
       nodes,
@@ -308,7 +309,7 @@ export function invalidateSearchCache(): void {
  */
 export function searchNodes(
   query: string,
-  nodes: Node[],
+  nodes: readonly Node[],
   options?: {
     limit?: number
     categoryFilter?: RoomCategory[]
@@ -376,10 +377,15 @@ export function searchNodes(
  * @param nodes  Node pool to search.
  * @returns The first matching node, or `undefined` if none.
  */
-export function findExactMatch(query: string, nodes: Node[]): Node | undefined {
+export function findExactMatch(query: string, nodes: readonly Node[]): Node | undefined {
+  return findExactMatches(query, nodes)[0]
+}
+
+/** Return every node whose room name or search alias exactly matches a query. */
+export function findExactMatches(query: string, nodes: readonly Node[]): Node[] {
   const normalized = normalizeSearchTerm(query)
 
-  return nodes.find((node) =>
+  return nodes.filter((node) =>
     [...node.rooms, ...getSearchAliases(node)].some(
       (term) => normalizeSearchTerm(term) === normalized
     )
