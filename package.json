@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@oxlint/plugins": "1.78.0",
-    "fast-uri": "3.1.6",
+    "fast-uri": "3.1.7",
     "oxlint": "1.78.0",
     "wrangler": "^4.121.0"
   }
